@@ -1,0 +1,30 @@
+{
+  "slug": "counterfactual-explanations-2017",
+  "title": "Counterfactual Explanations Without Opening the Black Box",
+  "authors": ["Sandra Wachter", "Brent Mittelstadt", "Chris Russell"],
+  "year": 2017,
+  "venue": "Harvard Journal of Law & Technology",
+  "url": "https://arxiv.org/abs/1711.00399",
+  "arxivId": "1711.00399",
+  "summary": "反実仮想説明（「X が違っていれば判定は変わっていた」）が、モデル内部を晒さずに有用で GDPR 適合な recourse を与えると論じ、それを距離最小化問題として定式化する。",
+  "novelty": "モデル内部を開示せず、入力をどう変えれば判定が変わるかという反実仮想で説明する枠組みを提示し、GDPR の文脈で recourse の法的意義を論じた点が新しい。",
+  "claims": [
+    "反実仮想は、モデルの透明性なしに実行可能で法的に意味のある説明を与える。",
+    "判定を反転させる最近傍点への距離を最小化することで求められる。"
+  ],
+  "method": "距離尺度の下で元の入力に近いまま予測を反転させる反実仮想を最適化する。",
+  "evaluation": "標準的な分類タスクで、距離最小化により最近傍の反実仮想を生成して提示。定量評価より概念的・法的な議論が主。",
+  "limitations": ["最近傍の反実仮想は非現実的／実行不能になり得る。", "単一の距離目的は実現可能性や相関を無視する。"],
+  "relatedPapers": ["Ustun et al. 2019（actionable recourse）", "DiCE（多様性＋実現可能性）"],
+  "relationToMyWork": "対照事例。素の距離を最小化するが、本研究はそれが実行不能な recourse を生むと批判する。コストと実現可能性を考慮した recourse の動機付けとして引用する。",
+  "researchContext": "現実的で相関のある行動コストの下での反実仮想 recourse",
+  "citationPurposes": [
+    { "purpose": "反実仮想説明／最近傍 CF 目的の起源", "suggestedSection": "Introduction" },
+    { "purpose": "本研究が反対する距離のみの目的", "suggestedSection": "Related Work" }
+  ],
+  "reusableIdeas": ["最適化としての反実仮想という定式化"],
+  "nextActions": ["recourse 実験における『実行不能ベースライン』として用いる"],
+  "themes": ["Counterfactual Recourse"],
+  "created": "2026-05-12T09:00:00.000Z",
+  "updated": "2026-05-12T09:00:00.000Z"
+}

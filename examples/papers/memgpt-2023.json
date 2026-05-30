@@ -1,0 +1,30 @@
+{
+  "slug": "memgpt-2023",
+  "title": "MemGPT: Towards LLMs as Operating Systems",
+  "authors": ["Charles Packer", "Sarah Wooders", "Kevin Lin", "Vivian Fang", "Shishir G. Patil", "Ion Stoica", "Joseph E. Gonzalez"],
+  "year": 2023,
+  "venue": "arXiv",
+  "url": "https://arxiv.org/abs/2310.08560",
+  "arxivId": "2310.08560",
+  "summary": "LLM エージェント向けに OS 風のメモリ階層を提案。固定長のコンテキスト窓（主記憶）を、モデル自身が発行する関数呼び出しで外部ストレージとページング交換し、長い対話や文書解析に対して無限コンテキストの錯覚を与える。",
+  "novelty": "従来の長文脈手法（窓拡大や受動的な RAG）が外部知識を引いてくるのに対し、LLM 自身が関数呼び出しで主記憶と外部ストレージ間のページングを能動的に制御する点が新しい。OS の仮想記憶の比喩を会話エージェントに持ち込んだ。",
+  "claims": [
+    "LLM は、文脈内の作業集合と外部ストレージの間でデータを移動するツール呼び出しによって、自分のメモリを管理できる。",
+    "仮想コンテキスト管理は、固定窓に比べて長対話・長文書タスクの性能を改善する。"
+  ],
+  "method": "階層メモリ（主コンテキスト＋recall／archival ストレージ）と自己発行のページング関数。イベントループがメモリ編集と検索を駆動する。",
+  "evaluation": "長期対話での事実・一貫性の維持と、長文書 QA で、固定窓やベースライン検索と比較。会話をまたぐ事実保持と文書全体にまたがる質問応答で改善を示した。",
+  "limitations": ["ページング方針はヒューリスティック（LLM 駆動）で最適化されていない。", "メモリ操作のたびに関数呼び出しの往復オーバーヘッドが生じる。"],
+  "relatedPapers": ["Generative Agents（メモリストリーム＋reflection）", "RAG 系（外部知識の検索拡張）の代表"],
+  "relationToMyWork": "エージェント記憶ストアの主要ベースライン。MemGPT は外部メモリを不透明なページ化ブロブとして扱うが、本研究はストア自体を動的な圧縮インデックスにすべきだと主張する。これにより検索がブロブのページングではなく構造を意識したものになる。",
+  "researchContext": "長期エージェント記憶のための動的圧縮コンテンツストア",
+  "citationPurposes": [
+    { "purpose": "LLM が外部メモリを自己管理する代表例", "suggestedSection": "Related Work" },
+    { "purpose": "ブロブ・ページングを構造化ストアと対比する際のベースライン", "suggestedSection": "Method" }
+  ],
+  "reusableIdeas": ["制御インタフェースとしての自己発行メモリ編集関数", "主記憶／recall／archival の階層分割"],
+  "nextActions": ["長セッションのベンチマークで、ページングのオーバーヘッドをインデックス型ストアと比較する"],
+  "themes": ["Agentic Memory"],
+  "created": "2026-05-20T09:00:00.000Z",
+  "updated": "2026-05-20T09:00:00.000Z"
+}

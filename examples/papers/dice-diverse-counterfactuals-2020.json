@@ -1,0 +1,49 @@
+{
+  "slug": "dice-diverse-counterfactuals-2020",
+  "title": "Explaining Machine Learning Classifiers through Diverse Counterfactual Explanations",
+  "authors": ["Ramaravind K. Mothilal", "Amit Sharma", "Chenhao Tan"],
+  "year": 2020,
+  "venue": "FAT* (ACM FAccT)",
+  "url": "https://arxiv.org/abs/1905.07697",
+  "arxivId": "1905.07697",
+  "summary": "DiCE（Diverse Counterfactual Explanations）を提案。与えられた入力に対し、妥当性（予測を反転）・近接性（元の入力に近い）・多様性（集合の要素同士が互いに離れている）を同時最適化して反実仮想例の*集合*を生成する。任意で利用者指定の実現可能性制約（不変特徴量、単調方向）を課せる。単一の最近傍反実仮想では不十分であり、多様な選択肢が複数の recourse 経路を提示すると論じる。",
+  "novelty": "単一の最近傍反実仮想ではなく、妥当性・近接性・多様性を同時最適化して反実仮想の*集合*を生成し、DPP 風の行列式で多様性を微分可能に正則化した点が新しい。",
+  "claims": [
+    "単一の反実仮想では不十分で、利用者は多様な代替 recourse の集合から利益を得る。",
+    "多様性＋近接性＋妥当性は、DPP 風の行列式項により微分可能な目的として同時最適化できる。",
+    "実現可能性制約（不変特徴量、単調な実行可能特徴量）を生成時に課せる。",
+    "表形式ベンチマーク全体で、DiCE は最近傍 CF ベースラインより多様で実現可能な反実仮想を、入力に近いまま生成する。"
+  ],
+  "method": "k 個の候補反実仮想を勾配ベースで同時最適化する。妥当性損失（予測を境界の向こうへ押す）＋近接性損失（元入力への L1/L2 距離、特徴量ごとに重み付け）＋多様性損失（k 候補間の対距離の行列式、DPP 風）。カテゴリ特徴量は one-hot 緩和で扱い、利用者が実行可能／不変の特徴量分割と特徴量ごとの範囲を与える。",
+  "evaluation": "Adult・COMPAS などの表形式ベンチマークで、最近傍 CF ベースラインに対し、多様性・実現可能性・近接性のトレードオフを定量比較。",
+  "limitations": [
+    "特徴量ごとのコストは独立で、行動間の相関や因果的／構造的コストをモデル化しない。",
+    "多様性は入力空間でのものであり、行動コスト空間ではない。多様な CF でも非現実的になり得る。",
+    "実現可能性は単純な特徴量ごとの制約（不変・単調）で課され、構造的／因果モデルではない。",
+    "勾配ベース版は微分可能なモデルへのアクセスを要する。"
+  ],
+  "relatedPapers": ["Wachter et al. 2017（反実仮想の起源）", "Ustun et al. 2019（actionable recourse）", "Mahajan et al.（DiCE の因果制約拡張）"],
+  "relationToMyWork": "最も近い関連研究ベースライン。Wachter 流の最近傍 CF に多様性と特徴量ごとの実現可能性を加えて拡張するが、依然として独立で分離可能な行動コストを仮定する。これこそ本研究が狙う隙間（相関／構造的コスト）である。DiCE の多様性の発想は残しつつ、独立な特徴量ごとのコストを相関／因果コストモデルに置き換える、というのを次の一歩として位置づける。",
+  "researchContext": "現実的で相関のある行動コストの下での反実仮想 recourse",
+  "citationPurposes": [
+    { "purpose": "（単一の最近傍ではなく）*複数*の反実仮想が必要であることの動機づけ", "suggestedSection": "Introduction" },
+    { "purpose": "Wachter-2017・Ustun-2019 と並ぶ、多様性＋近接性の主要ベースライン", "suggestedSection": "Related Work" },
+    { "purpose": "相関コスト計量の下で適応する、微分可能な多様性目的（DPP 風行列式）", "suggestedSection": "Method" },
+    { "purpose": "表形式ベンチマークでの直接比較 — DiCE の多様だが無相関な CF が現実的な行動コストの下で実現不能であることを示す", "suggestedSection": "Experiments" },
+    { "purpose": "特徴量が因果的に連動するとき、独立コストの多様性がどう破綻するかを論じる", "suggestedSection": "Discussion" }
+  ],
+  "reusableIdeas": [
+    "CF 集合に対する微分可能な多様性正則化子としての DPP 風行列式",
+    "妥当性＋近接性＋多様性を単一の損失で同時最適化する",
+    "実現可能性の事前情報としての、利用者指定の不変／単調な特徴量分割",
+    "（単一 CF ではなく）説明の単位としての k 個の反実仮想集合"
+  ],
+  "nextActions": [
+    "実験の多様性ベースラインとして、Adult / COMPAS で DiCE を再現する",
+    "独立コストの近接項を自分の相関コスト計量に置き換え、多様性 vs 実現可能性を再測定する",
+    "距離が低ランクの相関コスト行列で誘導されるとき、DPP 行列式が良条件のままか確認する"
+  ],
+  "themes": ["Counterfactual Recourse"],
+  "created": "2026-05-30T00:37:58.140Z",
+  "updated": "2026-05-30T00:37:58.140Z"
+}

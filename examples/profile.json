@@ -1,0 +1,10 @@
+{
+  "focus": "圧縮データ構造を軸に、(1) 長期エージェント記憶のための動的圧縮コンテンツストア、(2) 現実的で相関のある行動コストの下での反実仮想 recourse、の2つを進めている。",
+  "themes": ["Agentic Memory", "Compressed Indexing", "Counterfactual Recourse"],
+  "questions": [
+    "更新可能な自己インデックス（動的 RLBWT）は、エージェント記憶ストアの基盤になり得るか？",
+    "反実仮想 recourse のコストを、独立コストではなく相関／因果コストでどう定式化するか？",
+    "stale／上書き済みの記憶を、検索時に first-class に扱うにはどんな構造が要るか？"
+  ],
+  "updated": "2026-05-30T00:00:00.000Z"
+}

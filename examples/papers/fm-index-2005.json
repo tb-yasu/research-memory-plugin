@@ -1,0 +1,30 @@
+{
+  "slug": "fm-index-2005",
+  "title": "Indexing Compressed Text (the FM-index)",
+  "authors": ["Paolo Ferragina", "Giovanni Manzini"],
+  "year": 2005,
+  "venue": "Journal of the ACM",
+  "url": "https://dl.acm.org/doi/10.1145/1082036.1082039",
+  "doi": "10.1145/1082036.1082039",
+  "summary": "FM-index を提案。Burrows–Wheeler 変換に基づく self-index で、圧縮テキストに比例する空間で count／locate クエリを支える。インデックスが検索可能性を保ったままテキストを置き換える。",
+  "novelty": "BWT を用いて、圧縮テキストに比例する空間で全文検索できる self-index を初めて確立し、『インデックスがテキストを置き換える』という発想を示した点が新しい。",
+  "claims": [
+    "全文インデックスは圧縮テキストに近い空間に収まり得る（self-index）。",
+    "BWT 上の後方探索は、展開せずに部分文字列クエリに答える。"
+  ],
+  "method": "BWT＋wavelet tree／出現数構造により、LF-mapping と後方探索を支える。",
+  "evaluation": "理論解析が主。count／locate の計算量と圧縮空間の上界を証明し、実装でも実用性を確認。",
+  "limitations": ["古典的な形は静的で、更新には再構築が必要。", "実用上は定数倍とキャッシュ挙動が効いてくる。"],
+  "relatedPapers": ["Gagie et al. r-index（高反復向け、run 数 r に比例）", "動的 BWT／動的 self-index の各種研究"],
+  "relationToMyWork": "着想であり技術的中核。self-index の発想（圧縮されつつ同時に検索可能なストア）は、エージェント記憶のコンテンツストアがまさに備えるべきもの。静的更新という限界こそ、本研究の動的圧縮ストアが狙う隙間である。",
+  "researchContext": "長期エージェント記憶のための動的圧縮コンテンツストア",
+  "citationPurposes": [
+    { "purpose": "技術的基盤としての self-index（圧縮かつ検索可能なストア）", "suggestedSection": "Method" },
+    { "purpose": "動的版を動機づける静的更新の限界", "suggestedSection": "Discussion" }
+  ],
+  "reusableIdeas": ["self-index：インデックスがテキストを置き換える", "BWT 上の後方探索", "rank/select のための wavelet tree"],
+  "nextActions": ["更新対応のため、動的 BWT／動的 self-index の研究を調査する"],
+  "themes": ["Compressed Indexing"],
+  "created": "2026-05-22T09:00:00.000Z",
+  "updated": "2026-05-22T09:00:00.000Z"
+}
