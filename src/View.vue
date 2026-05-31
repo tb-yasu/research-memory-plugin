@@ -7,7 +7,9 @@
 
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { useRuntime } from "gui-chat-protocol/vue";
+import * as XLSX from "xlsx";
 import { useT } from "./lang";
+import { buildWorkbook } from "./excel";
 
 interface CitationPurpose {
   purpose: string;
@@ -205,6 +207,21 @@ async function copyExport(): Promise<void> {
     copied.value = true;
   } catch (err) {
     log.warn("clipboard failed", { error: String(err) });
+  }
+}
+
+// Excel export runs entirely in the browser: the list already holds full
+// cards, so we build the workbook (one sheet per theme + a leading "All"
+// sheet) and let SheetJS trigger the download. Always the whole library,
+// regardless of the on-screen search/theme filter.
+function exportExcel(): void {
+  if (cards.value.length === 0) return;
+  try {
+    const v = t.value;
+    const wb = buildWorkbook(cards.value, { all: v.xlsxAll, noTheme: v.noTheme, cols: v.xlsxCols, sections: v.sections });
+    XLSX.writeFile(wb, `literature-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  } catch (err) {
+    log.warn("excel export failed", { error: String(err) });
   }
 }
 
@@ -439,6 +456,7 @@ onUnmounted(() => unsubscribe?.());
           </select>
           <button class="btn" :disabled="!themeFilter" :title="t.btnCitation" @click="openCitation(themeFilter)">{{ t.btnCitation }}</button>
           <button class="btn" @click="doExport('bibtex')">{{ t.btnExportBibtex }}</button>
+          <button class="btn" :disabled="cards.length === 0" @click="exportExcel">{{ t.btnExportExcel }}</button>
           <button class="btn" @click="openProfile">{{ t.profileBtn }}</button>
           <button class="btn primary" @click="openAdd">+ {{ t.btnAdd }}</button>
         </div>
