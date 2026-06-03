@@ -43,3 +43,21 @@ test("rankCards scores title hits above body hits", () => {
 test("rankCards via sortCards relevance needs a query", () => {
   assert.deepEqual(sortCards([b, a], "relevance", "memory").map((x) => x.slug), ["a", "b"]);
 });
+
+test("filterCards by yearFrom keeps papers published in that year or later; drops undated", () => {
+  const old = card({ slug: "old", title: "FM-index", year: 2005 });
+  const mid = card({ slug: "mid", title: "Mid", year: 2020 });
+  const recent = card({ slug: "recent", title: "Dynamic r-index", year: 2025 });
+  const undated = card({ slug: "undated", title: "No year" });
+  const set = [old, mid, recent, undated];
+  assert.deepEqual(filterCards(set, { yearFrom: 2025 }).map((x) => x.slug), ["recent"]);
+  assert.deepEqual(filterCards(set, { yearFrom: 2020 }).map((x) => x.slug).sort(), ["mid", "recent"]);
+  assert.equal(filterCards(set, { yearFrom: 2000 }).some((x) => x.slug === "undated"), false);
+});
+
+test("filterCards combines theme and yearFrom (the reported 2025+ Compressed Indexing case)", () => {
+  const fm = card({ slug: "fm", title: "FM-index", year: 2005, themes: ["Compressed Indexing"] });
+  const jx = card({ slug: "jx", title: "jXBW", year: 2025, themes: ["Compressed Indexing"] });
+  const mem = card({ slug: "mem", title: "MemGPT", year: 2023, themes: ["Agentic Memory"] });
+  assert.deepEqual(filterCards([fm, jx, mem], { theme: "Compressed Indexing", yearFrom: 2025 }).map((x) => x.slug), ["jx"]);
+});

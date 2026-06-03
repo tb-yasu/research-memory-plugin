@@ -58,7 +58,7 @@ interface ResearchProfile {
 // (mcp-server.ts gates canvas rendering on the `data` field), and the
 // dispatch endpoint returns the same `{ data, message }` envelope.
 type ResultData =
-  | { view: "list"; cards: PaperCard[] }
+  | { view: "list"; cards: PaperCard[]; theme?: string | null; query?: string | null; yearFrom?: number | null }
   | { view: "detail"; card: PaperCard }
   | { view: "citationTable"; theme: string; rows: CitationRow[] }
   | { view: "export"; format: string; scope: string | null; content: string }
@@ -87,8 +87,13 @@ const EMPTY_PROFILE: ResearchProfile = { focus: "", themes: [], questions: [], u
 const sd = props.selectedResult.data;
 const cards = ref<PaperCard[]>(sd?.view === "list" ? sd.cards : sd?.view === "detail" ? [sd.card] : []);
 const selectedSlug = ref<string | null>(sd?.view === "detail" ? sd.card.slug : sd?.view === "list" ? (sd.cards[0]?.slug ?? null) : null);
-const query = ref("");
-const themeFilter = ref("");
+// Seed the on-screen filters from the tool result so a scoped request
+// ("show Agentic Memory papers") shows only that theme. cards.value still
+// holds the full library (refetch keeps it fresh), so clearing the filter
+// reveals everything again.
+const query = ref(sd?.view === "list" ? (sd.query ?? "") : "");
+const themeFilter = ref(sd?.view === "list" ? (sd.theme ?? "") : "");
+const yearFromInput = ref(sd?.view === "list" && sd.yearFrom != null ? String(sd.yearFrom) : "");
 const sortBy = ref<"recency" | "title">("recency");
 const collapsed = reactive(new Set<string>());
 const NO_THEME = "__no_theme__";
@@ -110,10 +115,17 @@ else if (sd?.view === "profile") mode.value = "profile";
 // ── derived ────────────────────────────────────────────────────────────
 const allThemes = computed(() => [...new Set(cards.value.flatMap((c) => c.themes))].sort((a, b) => a.localeCompare(b)));
 
+// "" / non-numeric → no year filter; otherwise the minimum publication year.
+const yearFromNum = computed(() => {
+  const n = Number(yearFromInput.value);
+  return yearFromInput.value.trim() !== "" && Number.isFinite(n) ? n : null;
+});
 const visibleCards = computed(() => {
   const q = query.value.trim().toLowerCase();
+  const yf = yearFromNum.value;
   return cards.value
     .filter((c) => (themeFilter.value ? c.themes.includes(themeFilter.value) : true))
+    .filter((c) => (yf === null ? true : c.year !== undefined && c.year >= yf))
     .filter((c) => (q ? cardText(c).includes(q) : true))
     .sort((a, b) => b.updated.localeCompare(a.updated));
 });
@@ -454,6 +466,7 @@ onUnmounted(() => unsubscribe?.());
             <option value="recency">{{ t.sortRecency }}</option>
             <option value="title">{{ t.sortTitle }}</option>
           </select>
+          <input v-model="yearFromInput" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" class="year-input" :placeholder="t.yearFrom" :title="t.yearFrom" />
           <button class="btn" :disabled="!themeFilter" :title="t.btnCitation" @click="openCitation(themeFilter)">{{ t.btnCitation }}</button>
           <button class="btn" @click="doExport('bibtex')">{{ t.btnExportBibtex }}</button>
           <button class="btn" :disabled="cards.length === 0" @click="exportExcel">{{ t.btnExportExcel }}</button>
@@ -623,6 +636,13 @@ onUnmounted(() => unsubscribe?.());
   border: 1px solid #d1d5db;
   border-radius: 0.25rem;
   background: #fff;
+}
+.year-input {
+  height: 2rem;
+  width: 5.5rem;
+  padding: 0 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
 }
 .btn {
   height: 2rem;

@@ -7,7 +7,7 @@ export const TOOL_DEFINITION = {
   name: "manageLiterature" as const,
   description:
     "Personal Literature Memory: capture papers you read as reusable, research-connected cards and reuse them later. Each card has TWO parts — (A) the paper in the Ochiai 6-question reading template: summary (1. what is it), novelty (2. vs prior work), method (3. key technique), evaluation (4. how validated), limitations (5. discussion), relatedPapers (6. what to read next); plus (B) the relational spine — how it connects to YOUR research: relationToMyWork, citationPurposes, reusableIdeas, nextActions, themes. " +
-    "Before writing relationToMyWork/researchContext, call `getProfile` to read the user's research profile and ground the relation in it (use `setProfile` with focus/themes/questions to create or update it; if the profile is empty, ask the user via presentForm first). `save` after the user pastes an abstract/notes (kebab-case slug). `update` patches an existing card (omitted fields preserved). `list` searches/filters (query, theme, sort). `citationTable` returns, for a theme, which papers to cite where. `export` emits BibTeX / a reference list / a markdown bundle.",
+    "Before writing relationToMyWork/researchContext, call `getProfile` to read the user's research profile and ground the relation in it (use `setProfile` with focus/themes/questions to create or update it; if the profile is empty, ask the user via presentForm first). `save` after the user pastes an abstract/notes (kebab-case slug). `update` patches an existing card (omitted fields preserved). `list` searches/filters (query, theme, yearFrom, sort). `citationTable` returns, for a theme, which papers to cite where. `export` emits BibTeX / a reference list / a markdown bundle.",
   parameters: {
     type: "object" as const,
     properties: {
@@ -47,6 +47,7 @@ export const TOOL_DEFINITION = {
       themes: { type: "array", items: { type: "string" }, description: "Research themes this card belongs to (used by filter + citation table)." },
       query: { type: "string", description: "Free-text search (list)." },
       theme: { type: "string", description: "Theme to filter by (list) or build a citation table for (citationTable). Required for citationTable." },
+      yearFrom: { type: "integer", description: "list filter: only papers published in this year or later (e.g. for '2025年以降' / 'since 2025', pass 2025). Papers with no recorded year are excluded." },
       sort: { type: "string", enum: ["recency", "relevance", "title"], description: "list sort. relevance needs query." },
       format: { type: "string", enum: ["bibtex", "references", "markdown"], description: "export format. Required for export." },
       scope: { type: "string", description: "export scope: a theme name, or omit for all cards." },

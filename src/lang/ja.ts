@@ -2,6 +2,7 @@ export default {
   title: "文献メモリ",
   search: "論文を検索…",
   allThemes: "すべてのテーマ",
+  yearFrom: "○年以降 (例:2025)",
   empty: "まだ論文がありません。チャットに abstract を貼って登録を頼むか、「+」で追加してください。",
   selectHint: "論文を選ぶと、自分の研究との関係が表示されます。",
 

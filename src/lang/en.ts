@@ -2,6 +2,7 @@ export default {
   title: "Literature Memory",
   search: "Search papers…",
   allThemes: "All themes",
+  yearFrom: "Year ≥ (e.g. 2025)",
   empty: "No papers yet. Paste an abstract in chat and ask to register it — or add one with “+”.",
   selectHint: "Select a paper to see how it connects to your work.",
 

@@ -49,7 +49,7 @@ const cardFields = {
 };
 
 const Args = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("list"), query: z.string().optional(), theme: z.string().optional(), sort: z.enum(["recency", "relevance", "title"]).optional() }),
+  z.object({ kind: z.literal("list"), query: z.string().optional(), theme: z.string().optional(), yearFrom: z.number().int().optional(), sort: z.enum(["recency", "relevance", "title"]).optional() }),
   z.object({ kind: z.literal("read"), slug: z.string() }),
   z.object({ kind: z.literal("save"), ...cardFields, slug: z.string(), title: z.string() }),
   z.object({ kind: z.literal("update"), ...cardFields, slug: z.string() }),
@@ -188,9 +188,12 @@ export default definePlugin(({ pubsub, files, log }) => {
       const args = Args.parse(rawArgs);
       switch (args.kind) {
         case "list": {
-          const filtered = filterCards(await listCards(), { query: args.query, theme: args.theme });
+          const filtered = filterCards(await listCards(), { query: args.query, theme: args.theme, yearFrom: args.yearFrom });
           const cards = sortCards(filtered, args.sort, args.query);
-          return { data: { view: "list", cards }, message: `Listed ${cards.length} paper(s) in the panel.`, jsonData: cards.map((c) => ({ slug: c.slug, title: c.title, year: c.year, themes: c.themes })) };
+          // Carry the filter context so the canvas can reflect a scoped
+          // request (e.g. theme:"Agentic Memory", yearFrom:2025) instead of
+          // showing all.
+          return { data: { view: "list", cards, theme: args.theme ?? null, query: args.query ?? null, yearFrom: args.yearFrom ?? null }, message: `Listed ${cards.length} paper(s) in the panel.`, jsonData: cards.map((c) => ({ slug: c.slug, title: c.title, year: c.year, themes: c.themes })) };
         }
         case "read": {
           const card = await readCard(args.slug);

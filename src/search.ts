@@ -14,11 +14,16 @@ function cardText(card: PaperCard): string {
     .toLowerCase();
 }
 
-export function filterCards(cards: PaperCard[], opts: { query?: string; theme?: string }): PaperCard[] {
+export function filterCards(cards: PaperCard[], opts: { query?: string; theme?: string; yearFrom?: number }): PaperCard[] {
   let out = cards;
   if (opts.theme) {
     const theme = opts.theme;
     out = out.filter((card) => card.themes.includes(theme));
+  }
+  if (opts.yearFrom !== undefined) {
+    const from = opts.yearFrom;
+    // A card with no recorded year can't be confirmed in range — exclude it.
+    out = out.filter((card) => card.year !== undefined && card.year >= from);
   }
   if (opts.query && opts.query.trim()) {
     const q = opts.query.toLowerCase();

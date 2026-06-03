@@ -4,6 +4,8 @@ A [MulmoClaude](https://github.com/receptron/mulmoclaude) runtime plugin that tu
 
 > Reading a paper and summarizing it is easy and commoditized. The hard part is remembering, months later, *how this paper relates to your own research* and *where you can reuse it*. This plugin captures exactly that, and lets you (and an LLM) query it.
 
+> **A note on the name.** The npm package is `research-memory-plugin` to match the longer arc — a general *research-state* model spanning Claim / Evidence / Decision / Context (see [Roadmap](#roadmap)). Today's shipped scope is **literature only** — papers, the citation spine, BibTeX/Excel export, and a research profile.
+
 Every paper is stored as a **Paper Card**: the paper's own content (summary, claims, method, limitations) **plus the relational spine** — the part Zotero/Notion don't have:
 
 - **Relation to my work** — competitor / related / inspiration / contrast, specifically.
@@ -15,9 +17,10 @@ Every paper is stored as a **Paper Card**: the paper's own content (summary, cla
 ## What you can do
 
 - **Capture from chat** — paste an abstract and your notes; the LLM extracts a Paper Card and fills the spine relative to your research focus, then saves it.
-- **Search & filter** — full-text search and theme filter over your whole corpus (deterministic, in the plugin).
+- **Search & filter** — full-text search, theme filter, and *year-from* filter over your whole corpus (deterministic, in the plugin).
 - **Citation table** — for a theme, get a table of *which paper to cite, for what, in which section* — straight into your Related Work.
-- **Export** — BibTeX, a numbered reference list, or a markdown bundle.
+- **Export** — BibTeX, a numbered reference list, a markdown bundle, or an Excel workbook.
+- **Research profile** — capture your current focus, themes, and open questions; the LLM uses this to ground every paper's *Relation to my work* and *Citation purposes*.
 - **Add/edit by hand** — a form in the canvas; the plugin is fully usable without the LLM.
 
 ## How it works (design)
@@ -32,12 +35,14 @@ So the "intelligence" is the LLM; the plugin is a dependable, testable store wit
 | Module | Responsibility |
 |---|---|
 | `src/card.ts` | `PaperCard` schema, JSON (de)serialize, slug rules, partial-merge |
-| `src/search.ts` | `filterCards` / `rankCards` / `sortCards` (keyword + recency) |
+| `src/search.ts` | `filterCards` / `rankCards` / `sortCards` (keyword + recency + year-from) |
 | `src/citation.ts` | `citationTable`, `toBibTeX`, `toReferenceList`, `toMarkdownBundle` |
-| `src/index.ts` | `definePlugin` factory: CRUD + list/search + citationTable + export |
-| `src/View.vue` | browse (list + detail + theme filter + search), citation-table mode, export, add/edit form |
+| `src/profile.ts` | `ResearchProfile` read / write (focus / themes / open questions) |
+| `src/excel.ts` | XLSX workbook for the Excel export |
+| `src/index.ts` | `definePlugin` factory: CRUD + list/search + citationTable + export + profile |
+| `src/View.vue` | browse (list + detail + theme/year filter + search), citation-table mode, export, add/edit form, profile editor |
 
-The MCP tool is `manageLiterature` (kinds: `list`, `read`, `save`, `update`, `delete`, `citationTable`, `export`).
+The MCP tool is `manageLiterature` (kinds: `list`, `read`, `save`, `update`, `delete`, `citationTable`, `export`, `getProfile`, `setProfile`).
 
 ## Develop against MulmoClaude
 
@@ -71,9 +76,10 @@ Runtime-plugin tools are gated by a role's `availablePlugins`. Add a role at `~/
 ```bash
 mkdir -p ~/mulmoclaude/data/plugins/research-memory-plugin/papers
 cp examples/papers/*.json ~/mulmoclaude/data/plugins/research-memory-plugin/papers/
+cp examples/profile.json  ~/mulmoclaude/data/plugins/research-memory-plugin/profile.json
 ```
 
-Five sample cards across *Agentic Memory*, *Counterfactual Recourse*, and *Compressed Indexing* so search / theme filter / citation table / export all work immediately.
+Seven sample cards across *Agentic Memory*, *Counterfactual Recourse*, and *Compressed Indexing* so search / theme filter / citation table / export all work immediately — plus a pre-filled research profile so the *Relation to my work* fields are grounded from the start.
 
 ## Demo (the loop)
 
@@ -85,7 +91,7 @@ Five sample cards across *Agentic Memory*, *Counterfactual Recourse*, and *Compr
 ## Tests
 
 ```bash
-yarn test     # tsx --test: card schema, search/ranking, citation/BibTeX, fixtures, and an end-to-end handler round-trip
+yarn test     # tsx --test: card schema, search/ranking, citation/BibTeX, profile read-write, Excel export, fixtures, and an end-to-end handler round-trip
 ```
 
 ## Roadmap
