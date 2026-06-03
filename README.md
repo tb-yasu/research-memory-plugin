@@ -1,10 +1,8 @@
-# Personal Literature Memory
+# Research Memory
 
-A [MulmoClaude](https://github.com/receptron/mulmoclaude) runtime plugin that turns the papers you read into **reusable, research-connected memory** — not summaries.
+A [MulmoClaude](https://github.com/receptron/mulmoclaude) runtime plugin for *research-connected memory*. **Today's scope: literature** — turning the papers you read into a relational, queryable store, not summaries. The longer arc generalizes the spine to a research-state model — Claim / Evidence / Decision / Context (see [Roadmap](#roadmap)).
 
 > Reading a paper and summarizing it is easy and commoditized. The hard part is remembering, months later, *how this paper relates to your own research* and *where you can reuse it*. This plugin captures exactly that, and lets you (and an LLM) query it.
-
-> **A note on the name.** The npm package is `research-memory-plugin` to match the longer arc — a general *research-state* model spanning Claim / Evidence / Decision / Context (see [Roadmap](#roadmap)). Today's shipped scope is **literature only** — papers, the citation spine, BibTeX/Excel export, and a research profile.
 
 Every paper is stored as a **Paper Card**: the paper's own content (summary, claims, method, limitations) **plus the relational spine** — the part Zotero/Notion don't have:
 
