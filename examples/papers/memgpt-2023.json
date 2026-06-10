@@ -1,7 +1,15 @@
 {
   "slug": "memgpt-2023",
   "title": "MemGPT: Towards LLMs as Operating Systems",
-  "authors": ["Charles Packer", "Sarah Wooders", "Kevin Lin", "Vivian Fang", "Shishir G. Patil", "Ion Stoica", "Joseph E. Gonzalez"],
+  "authors": [
+    "Charles Packer",
+    "Sarah Wooders",
+    "Kevin Lin",
+    "Vivian Fang",
+    "Shishir G. Patil",
+    "Ion Stoica",
+    "Joseph E. Gonzalez"
+  ],
   "year": 2023,
   "venue": "arXiv",
   "url": "https://arxiv.org/abs/2310.08560",
@@ -14,17 +22,37 @@
   ],
   "method": "階層メモリ（主コンテキスト＋recall／archival ストレージ）と自己発行のページング関数。イベントループがメモリ編集と検索を駆動する。",
   "evaluation": "長期対話での事実・一貫性の維持と、長文書 QA で、固定窓やベースライン検索と比較。会話をまたぐ事実保持と文書全体にまたがる質問応答で改善を示した。",
-  "limitations": ["ページング方針はヒューリスティック（LLM 駆動）で最適化されていない。", "メモリ操作のたびに関数呼び出しの往復オーバーヘッドが生じる。"],
-  "relatedPapers": ["Generative Agents（メモリストリーム＋reflection）", "RAG 系（外部知識の検索拡張）の代表"],
-  "relationToMyWork": "エージェント記憶ストアの主要ベースライン。MemGPT は外部メモリを不透明なページ化ブロブとして扱うが、本研究はストア自体を動的な圧縮インデックスにすべきだと主張する。これにより検索がブロブのページングではなく構造を意識したものになる。",
+  "limitations": [
+    "ページング方針はヒューリスティック（LLM 駆動）で最適化されていない。",
+    "メモリ操作のたびに関数呼び出しの往復オーバーヘッドが生じる。"
+  ],
+  "relatedPapers": [
+    "Generative Agents（メモリストリーム＋reflection）",
+    "RAG 系（外部知識の検索拡張）の代表"
+  ],
+  "relationToMyWork": "MemGPT は、エージェント記憶ストアの研究における主要なベースラインである。MemGPT が外部メモリを中身の見えないページの塊（ブロブ）として出し入れするのに対し、本研究はストア自体を動的な圧縮インデックスとして構成すべきだと主張する。これにより、検索はブロブのページングではなく、記憶の構造をたどる操作になる。",
   "researchContext": "長期エージェント記憶のための動的圧縮コンテンツストア",
   "citationPurposes": [
-    { "purpose": "LLM が外部メモリを自己管理する代表例", "suggestedSection": "Related Work" },
-    { "purpose": "ブロブ・ページングを構造化ストアと対比する際のベースライン", "suggestedSection": "Method" }
+    {
+      "purpose": "LLM が外部メモリを自己管理する代表例",
+      "suggestedSection": "Related Work"
+    },
+    {
+      "purpose": "ブロブ・ページングを構造化ストアと対比する際のベースライン",
+      "suggestedSection": "Method"
+    }
   ],
-  "reusableIdeas": ["制御インタフェースとしての自己発行メモリ編集関数", "主記憶／recall／archival の階層分割"],
-  "nextActions": ["長セッションのベンチマークで、ページングのオーバーヘッドをインデックス型ストアと比較する"],
-  "themes": ["Agentic Memory"],
+  "reusableIdeas": [
+    "制御インタフェースとしての自己発行メモリ編集関数",
+    "主記憶／recall／archival の階層分割"
+  ],
+  "nextActions": [
+    "長セッションのベンチマークで、ページングのオーバーヘッドをインデックス型ストアと比較する"
+  ],
+  "themes": [
+    "Agentic Memory",
+    "Memory Architecture"
+  ],
   "created": "2026-05-20T09:00:00.000Z",
-  "updated": "2026-05-20T09:00:00.000Z"
+  "updated": "2026-06-04T13:00:00.000Z"
 }

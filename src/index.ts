@@ -11,10 +11,12 @@
 import { definePlugin } from "gui-chat-protocol";
 import { z } from "zod";
 import { TOOL_DEFINITION } from "./definition";
-import { CitationPurposeSchema, PaperCardSchema, isValidSlug, mergeCard, parseCard, serializeCard, type CardPatch, type PaperCard } from "./card";
+import { CitationPurposeSchema, PaperCardSchema, findDuplicates, isValidSlug, mergeCard, mergeFull, parseCard, serializeCard, type CardPatch, type PaperCard } from "./card";
 import { filterCards, sortCards } from "./search";
 import { citationTable, toBibTeX, toMarkdownBundle, toReferenceList } from "./citation";
+import { buildRelatedWorkOutline, relatedWorkToMarkdown, themeSlug } from "./relatedwork";
 import { EMPTY_PROFILE, mergeProfile, parseProfile, serializeProfile, type ProfilePatch, type ResearchProfile } from "./profile";
+import { fetchArxiv, fetchDoi, MetadataError } from "./metadata";
 
 export { TOOL_DEFINITION };
 
@@ -51,17 +53,21 @@ const cardFields = {
 const Args = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("list"), query: z.string().optional(), theme: z.string().optional(), yearFrom: z.number().int().optional(), sort: z.enum(["recency", "relevance", "title"]).optional() }),
   z.object({ kind: z.literal("read"), slug: z.string() }),
-  z.object({ kind: z.literal("save"), ...cardFields, slug: z.string(), title: z.string() }),
+  z.object({ kind: z.literal("save"), ...cardFields, slug: z.string(), title: z.string(), force: z.boolean().optional() }),
   z.object({ kind: z.literal("update"), ...cardFields, slug: z.string() }),
   z.object({ kind: z.literal("delete"), slug: z.string() }),
   z.object({ kind: z.literal("citationTable"), theme: z.string() }),
+  z.object({ kind: z.literal("relatedWork"), theme: z.string() }),
   z.object({ kind: z.literal("export"), format: z.enum(["bibtex", "references", "markdown"]), scope: z.string().optional() }),
   z.object({ kind: z.literal("getProfile") }),
   z.object({ kind: z.literal("setProfile"), focus: z.string().optional(), themes: z.array(z.string()).optional(), questions: z.array(z.string()).optional() }),
+  z.object({ kind: z.literal("fetchMetadata"), arxivId: z.string().optional(), doi: z.string().optional() }),
+  z.object({ kind: z.literal("mergePapers"), ...cardFields, targetSlug: z.string() }),
 ]);
 
 type SaveArgs = Extract<z.infer<typeof Args>, { kind: "save" }>;
 type UpdateArgs = Extract<z.infer<typeof Args>, { kind: "update" }>;
+type MergeArgs = Extract<z.infer<typeof Args>, { kind: "mergePapers" }>;
 
 function paperPath(slug: string): string {
   return `${PAPERS_DIR}/${slug}.json`;
@@ -98,7 +104,7 @@ function renderExport(cards: PaperCard[], format: "bibtex" | "references" | "mar
   return toMarkdownBundle(cards);
 }
 
-export default definePlugin(({ pubsub, files, log }) => {
+export default definePlugin(({ pubsub, files, log, fetch }) => {
   // Serialise read-modify-write so two parallel mutations on the same
   // slug don't both read one snapshot and silently drop an update.
   let writeLock: Promise<unknown> = Promise.resolve();
@@ -137,13 +143,88 @@ export default definePlugin(({ pubsub, files, log }) => {
   async function handleSave(args: SaveArgs): Promise<unknown> {
     if (!isValidSlug(args.slug)) return { error: "invalid slug — use kebab-case (a-z, 0-9, hyphens)", status: 400 };
     return withWriteLock(async () => {
+      const all = await listCards();
+      const dup = findDuplicates({ slug: args.slug, title: args.title, doi: args.doi, arxivId: args.arxivId }, all);
+      if (dup.hard.length > 0 && !args.force) {
+        // Re-dispatchable candidate: every cardField the user/LLM passed
+        // in, minus `kind` and `force`. The conflict view button bar
+        // forwards this payload directly to `mergePapers` or to `save`
+        // with `force: true`.
+        const candidate = {
+          slug: args.slug,
+          title: args.title,
+          authors: args.authors,
+          year: args.year,
+          venue: args.venue,
+          url: args.url,
+          doi: args.doi,
+          arxivId: args.arxivId,
+          summary: args.summary,
+          novelty: args.novelty,
+          claims: args.claims,
+          method: args.method,
+          evaluation: args.evaluation,
+          limitations: args.limitations,
+          relatedPapers: args.relatedPapers,
+          relationToMyWork: args.relationToMyWork,
+          researchContext: args.researchContext,
+          citationPurposes: args.citationPurposes,
+          reusableIdeas: args.reusableIdeas,
+          nextActions: args.nextActions,
+          themes: args.themes,
+        };
+        log.info("save blocked by duplicate", { slug: args.slug, hard: dup.hard });
+        return {
+          error: "duplicate",
+          status: 409,
+          data: { view: "conflict", candidate, duplicates: dup.hard },
+          message: `"${args.title}" looks like a duplicate of ${dup.hard.map((d) => d.slug).join(", ")} — confirm with the user (merge / overwrite / skip).`,
+          // LLM gets the slim version — it already holds the full args.
+          jsonData: { candidate: { slug: args.slug, title: args.title }, duplicates: dup.hard },
+        };
+      }
       const existing = await readCard(args.slug);
       const now = nowIso();
-      // PaperCardSchema strips the extra `kind` key and applies array defaults.
+      // PaperCardSchema strips extra keys (kind, force) and applies array defaults.
       const card = PaperCardSchema.parse({ ...args, created: existing?.created ?? now, updated: now });
       await writeCard(card);
       log.info("paper saved", { slug: card.slug });
-      return { data: { view: "detail", card }, message: `Saved "${card.title}" (${card.slug}).` };
+      const envelope: Record<string, unknown> = { data: { view: "detail", card }, message: `Saved "${card.title}" (${card.slug}).` };
+      if (dup.soft.length > 0) envelope.warning = dup.soft.map((d) => `title resembles ${d.slug}: "${d.title}"`);
+      return envelope;
+    });
+  }
+
+  async function handleMerge(args: MergeArgs): Promise<unknown> {
+    return withWriteLock(async () => {
+      const existing = await readCard(args.targetSlug);
+      if (!existing) return { error: `not found: ${args.targetSlug}`, status: 404 };
+      const incoming: Partial<PaperCard> = {
+        title: args.title,
+        authors: args.authors,
+        year: args.year,
+        venue: args.venue,
+        url: args.url,
+        doi: args.doi,
+        arxivId: args.arxivId,
+        summary: args.summary,
+        novelty: args.novelty,
+        claims: args.claims,
+        method: args.method,
+        evaluation: args.evaluation,
+        limitations: args.limitations,
+        relatedPapers: args.relatedPapers,
+        relationToMyWork: args.relationToMyWork,
+        researchContext: args.researchContext,
+        citationPurposes: args.citationPurposes,
+        reusableIdeas: args.reusableIdeas,
+        nextActions: args.nextActions,
+        themes: args.themes,
+      };
+      const card = mergeFull(existing, incoming, nowIso());
+      await writeCard(card);
+      log.info("paper merged", { slug: card.slug });
+      return { data: { view: "detail", card }, message: `Merged into "${card.title}" (${card.slug}).` };
     });
   }
 
@@ -203,11 +284,36 @@ export default definePlugin(({ pubsub, files, log }) => {
           return handleSave(args);
         case "update":
           return handleUpdate(args);
+        case "mergePapers":
+          return handleMerge(args);
         case "delete":
           return handleDelete(args.slug);
         case "citationTable": {
           const rows = citationTable(await listCards(), args.theme);
           return { data: { view: "citationTable", theme: args.theme, rows }, message: `Citation table for "${args.theme}": ${rows.length} row(s) in the panel.`, jsonData: rows };
+        }
+        case "relatedWork": {
+          // profile.focus rides along so the outline can state what 「本研究」
+          // refers to — the points are contrasts against it.
+          const profile = await readProfile();
+          const outline = buildRelatedWorkOutline(await listCards(), args.theme, profile.focus);
+          const markdown = relatedWorkToMarkdown(outline);
+          // Persist the artifact — files are the source of truth. One file
+          // per theme, overwritten on each call, so a later "save it / draft
+          // on top of it" request reads the file instead of reverse-
+          // engineering the format from a long-gone tool result.
+          const mdPath = `related-work/${themeSlug(args.theme)}.md`;
+          await files.data.write(mdPath, markdown);
+          // jsonData carries the deterministic markdown skeleton. The panel
+          // shows it too, but the deliverable is the markdown itself — so the
+          // message tells the LLM to reproduce it verbatim. Rewriting is
+          // forbidden: merging per-paper statements into one paragraph is
+          // what produces broken, telegraphic prose.
+          return {
+            data: { view: "relatedWork", outline, markdown },
+            message: `Related Work outline for "${args.theme}": ${outline.paperCount} paper(s) in ${outline.groups.length} group(s). Saved to data/plugins/research-memory-plugin/${mdPath} (overwritten per theme). Reproduce the markdown from jsonData in your reply VERBATIM — do not rewrite, merge, summarize, or relabel its bullets (translate the fixed Japanese labels only if the user writes in another language). To reuse the outline later (saving elsewhere, drafting prose), call relatedWork again or read the saved file — NEVER reconstruct the format by hand or from plugin source. If the user wants full Related Work prose, write it separately: one paragraph per group, complete sentences, each claim grounded only in that paper's own bullets.`,
+            jsonData: markdown,
+          };
         }
         case "export": {
           const all = await listCards();
@@ -221,6 +327,19 @@ export default definePlugin(({ pubsub, files, log }) => {
         }
         case "setProfile":
           return handleSetProfile({ focus: args.focus, themes: args.themes, questions: args.questions });
+        case "fetchMetadata": {
+          if (!args.arxivId && !args.doi) return { error: "fetchMetadata requires arxivId or doi", status: 400 };
+          try {
+            const patch = args.arxivId ? await fetchArxiv(args.arxivId, fetch) : await fetchDoi(args.doi as string, fetch);
+            const label = args.arxivId ? `arXiv:${args.arxivId}` : `DOI:${args.doi}`;
+            // No `data` field — the canvas stays untouched. The LLM uses
+            // `jsonData` to compose a follow-up save call.
+            return { message: `Fetched metadata for ${label}: "${patch.title}".`, jsonData: patch };
+          } catch (err) {
+            if (err instanceof MetadataError) return { error: err.message, status: err.code === "not-found" ? 404 : 502 };
+            return { error: String(err), status: 500 };
+          }
+        }
         default: {
           const exhaustive: never = args;
           throw new Error(`unknown kind: ${JSON.stringify(exhaustive)}`);

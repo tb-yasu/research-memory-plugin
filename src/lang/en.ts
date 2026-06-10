@@ -38,6 +38,17 @@ export default {
   exportTitle: "Export",
   emptyTable: "No papers in this theme yet.",
 
+  // Related Work outline
+  btnRelatedWork: "Related Work",
+  rwTitle: "Related Work outline",
+  rwHint: "Groups = co-occurring themes (largest first); papers in chronological order. Built deterministically from your Paper Cards — ask in chat to draft prose on top of it.",
+  rwPoints: "Discussion points (contrast with my work)",
+  rwPapers: "Papers to cite",
+  rwPurpose: "Cite for",
+  rwNoPurpose: "(no citation purpose recorded)",
+  rwUngrouped: "Other (no co-occurring theme)",
+  rwGaps: "No citation purpose recorded",
+
   formAddTitle: "Add paper",
   formEditTitle: "Edit paper",
   fSlug: "Slug (kebab-case)",
@@ -82,6 +93,17 @@ export default {
   sortRecency: "Recent",
   sortTitle: "Title",
   noTheme: "(no theme)",
+
+  // Duplicate detection / conflict resolution
+  secConflict: "Possible duplicate",
+  conflictHint: "This paper may already be in your library. Pick one of the options below.",
+  conflictNew: "What you tried to add",
+  btnOpenExisting: "Open existing",
+  btnMergeInto: "Merge into this",
+  btnOverwrite: "Overwrite",
+  dupReasonDoi: "DOI matches",
+  dupReasonArxiv: "arXiv ID matches",
+  dupReasonTitle: "Title is very similar",
 
   // Excel export (one sheet per theme + a leading "All" sheet)
   xlsxAll: "All",

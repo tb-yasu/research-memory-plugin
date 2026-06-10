@@ -20,14 +20,30 @@
     "解析は部分文字列ごとに仕事量を課すため、非常に長い挿入は多数の小さな挿入とは異なる償却になる。",
     "提供された abstract に著者・掲載先が記載されていない。確認次第埋める。"
   ],
-  "relatedPapers": ["Gagie et al. 2020（静的 r-index）", "FM-index（self-index の起源）", "動的 RLBWT の関連研究"],
-  "relationToMyWork": "技術的中核の直接候補。本研究は長期エージェント記憶のための動的圧縮コンテンツストアを目指しており、本論文は FM-index カードで指摘した隙間（『動的版を動機づける静的更新の限界』）をまさに埋める。更新コストが LCP で支配される、具体的な RLBWT ベースの self-index を与える。エージェントの記憶ストリーム（チャット、ツールログ、繰り返されるツール出力）はまさに L_avg が小さい高反復領域であり、LCP で抑えた限界は悲観的ではなく意味を持つ。",
+  "relatedPapers": [
+    "Gagie et al. 2020（静的 r-index）",
+    "FM-index（self-index の起源）",
+    "動的 RLBWT の関連研究"
+  ],
+  "relationToMyWork": "動的 r-index は、本研究の技術的中核となる直接の候補である。本研究は長期エージェント記憶のための動的圧縮コンテンツストアを目指しており、本論文は FM-index のカードで指摘した「静的にしか構築できない」という限界をまさに埋める、更新コストが LCP で抑えられた RLBWT ベースの self-index を与える。エージェントの記憶ストリーム（チャット、ツールログ、繰り返されるツール出力）は反復性が高く平均 LCP が小さい領域なので、この上界は悲観的ではなく実際に意味を持つ。",
   "researchContext": "長期エージェント記憶のための動的圧縮コンテンツストア",
   "citationPurposes": [
-    { "purpose": "O(r) 空間の具体的な動的 self-index — 提案するエージェント記憶ストアの技術的中核", "suggestedSection": "Method" },
-    { "purpose": "関連研究の物語で FM-index／静的 r-index の静的更新ギャップを埋める", "suggestedSection": "Related Work" },
-    { "purpose": "LCP で抑える更新コストが高反復ワークロードで現実的であり、エージェントログの特性に合致する証拠", "suggestedSection": "Experiments" },
-    { "purpose": "LCP 領域が崩れる場合（多様なテキスト、大きな L_max）を手法の限界として論じる", "suggestedSection": "Limitations" }
+    {
+      "purpose": "O(r) 空間の具体的な動的 self-index — 提案するエージェント記憶ストアの技術的中核",
+      "suggestedSection": "Method"
+    },
+    {
+      "purpose": "関連研究の物語で FM-index／静的 r-index の静的更新ギャップを埋める",
+      "suggestedSection": "Related Work"
+    },
+    {
+      "purpose": "LCP で抑える更新コストが高反復ワークロードで現実的であり、エージェントログの特性に合致する証拠",
+      "suggestedSection": "Experiments"
+    },
+    {
+      "purpose": "LCP 領域が崩れる場合（多様なテキスト、大きな L_max）を手法の限界として論じる",
+      "suggestedSection": "Limitations"
+    }
   ],
   "reusableIdeas": [
     "更新の LCP で抑えるコストモデル — 反復領域では最悪計算量 n より良い",
@@ -41,7 +57,9 @@
     "更新が任意の部分文字列の書き換えに対応するのか、境界の挿入・削除のみかを調べる — 『メモリのその場編集』が安価かに関わる",
     "著者・arXiv id・掲載先を確認し、本カードを更新する"
   ],
-  "themes": ["Compressed Indexing"],
+  "themes": [
+    "Compressed Indexing"
+  ],
   "created": "2026-05-29T00:00:00.000Z",
-  "updated": "2026-05-29T00:00:00.000Z"
+  "updated": "2026-06-04T13:00:00.000Z"
 }

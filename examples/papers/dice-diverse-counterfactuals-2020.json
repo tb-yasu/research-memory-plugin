@@ -1,7 +1,11 @@
 {
   "slug": "dice-diverse-counterfactuals-2020",
   "title": "Explaining Machine Learning Classifiers through Diverse Counterfactual Explanations",
-  "authors": ["Ramaravind K. Mothilal", "Amit Sharma", "Chenhao Tan"],
+  "authors": [
+    "Ramaravind K. Mothilal",
+    "Amit Sharma",
+    "Chenhao Tan"
+  ],
   "year": 2020,
   "venue": "FAT* (ACM FAccT)",
   "url": "https://arxiv.org/abs/1905.07697",
@@ -22,15 +26,34 @@
     "実現可能性は単純な特徴量ごとの制約（不変・単調）で課され、構造的／因果モデルではない。",
     "勾配ベース版は微分可能なモデルへのアクセスを要する。"
   ],
-  "relatedPapers": ["Wachter et al. 2017（反実仮想の起源）", "Ustun et al. 2019（actionable recourse）", "Mahajan et al.（DiCE の因果制約拡張）"],
-  "relationToMyWork": "最も近い関連研究ベースライン。Wachter 流の最近傍 CF に多様性と特徴量ごとの実現可能性を加えて拡張するが、依然として独立で分離可能な行動コストを仮定する。これこそ本研究が狙う隙間（相関／構造的コスト）である。DiCE の多様性の発想は残しつつ、独立な特徴量ごとのコストを相関／因果コストモデルに置き換える、というのを次の一歩として位置づける。",
+  "relatedPapers": [
+    "Wachter et al. 2017（反実仮想の起源）",
+    "Ustun et al. 2019（actionable recourse）",
+    "Mahajan et al.（DiCE の因果制約拡張）"
+  ],
+  "relationToMyWork": "DiCE は、本研究に最も近い関連研究のベースラインである。Wachter 流の最近傍反実仮想に多様性と特徴量ごとの実現可能性を加えて拡張したが、行動コストについては依然として特徴量ごとに独立で分離可能という仮定を置いている。この仮定こそ、相関・構造を持つコストという本研究の狙う隙間である。DiCE の多様性の発想は引き継ぎつつ、独立な特徴量ごとのコストを相関・因果コストモデルに置き換えることを次の一歩として位置づける。",
   "researchContext": "現実的で相関のある行動コストの下での反実仮想 recourse",
   "citationPurposes": [
-    { "purpose": "（単一の最近傍ではなく）*複数*の反実仮想が必要であることの動機づけ", "suggestedSection": "Introduction" },
-    { "purpose": "Wachter-2017・Ustun-2019 と並ぶ、多様性＋近接性の主要ベースライン", "suggestedSection": "Related Work" },
-    { "purpose": "相関コスト計量の下で適応する、微分可能な多様性目的（DPP 風行列式）", "suggestedSection": "Method" },
-    { "purpose": "表形式ベンチマークでの直接比較 — DiCE の多様だが無相関な CF が現実的な行動コストの下で実現不能であることを示す", "suggestedSection": "Experiments" },
-    { "purpose": "特徴量が因果的に連動するとき、独立コストの多様性がどう破綻するかを論じる", "suggestedSection": "Discussion" }
+    {
+      "purpose": "（単一の最近傍ではなく）*複数*の反実仮想が必要であることの動機づけ",
+      "suggestedSection": "Introduction"
+    },
+    {
+      "purpose": "Wachter-2017・Ustun-2019 と並ぶ、多様性＋近接性の主要ベースライン",
+      "suggestedSection": "Related Work"
+    },
+    {
+      "purpose": "相関コスト計量の下で適応する、微分可能な多様性目的（DPP 風行列式）",
+      "suggestedSection": "Method"
+    },
+    {
+      "purpose": "表形式ベンチマークでの直接比較 — DiCE の多様だが無相関な CF が現実的な行動コストの下で実現不能であることを示す",
+      "suggestedSection": "Experiments"
+    },
+    {
+      "purpose": "特徴量が因果的に連動するとき、独立コストの多様性がどう破綻するかを論じる",
+      "suggestedSection": "Discussion"
+    }
   ],
   "reusableIdeas": [
     "CF 集合に対する微分可能な多様性正則化子としての DPP 風行列式",
@@ -43,7 +66,9 @@
     "独立コストの近接項を自分の相関コスト計量に置き換え、多様性 vs 実現可能性を再測定する",
     "距離が低ランクの相関コスト行列で誘導されるとき、DPP 行列式が良条件のままか確認する"
   ],
-  "themes": ["Counterfactual Recourse"],
+  "themes": [
+    "Counterfactual Recourse"
+  ],
   "created": "2026-05-30T00:37:58.140Z",
-  "updated": "2026-05-30T00:37:58.140Z"
+  "updated": "2026-06-04T13:00:00.000Z"
 }

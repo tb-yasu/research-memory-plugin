@@ -74,3 +74,107 @@ export function mergeCard(existing: PaperCard, patch: CardPatch, updated: string
   const defined = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) as Partial<PaperCard>;
   return { ...existing, ...defined, updated };
 }
+
+// ── Duplicate detection ──────────────────────────────────────────────
+
+/** Lowercase, strip punctuation, collapse whitespace. Used for fuzzy
+ *  title comparison only — the canonical store key is still `slug`. */
+export function normalizeTitle(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export interface DupHit {
+  slug: string;
+  title: string;
+  reason: "doi" | "arxivId" | "title";
+}
+
+export interface DupResult {
+  hard: DupHit[];
+  soft: DupHit[];
+}
+
+/** Scan `all` for a card that collides with `candidate` (skipping the
+ *  candidate's own slug). `doi` or `arxivId` exact match → hard; same
+ *  normalized title → soft. */
+export function findDuplicates(candidate: { slug: string; title?: string; doi?: string; arxivId?: string }, all: PaperCard[]): DupResult {
+  const hard: DupHit[] = [];
+  const soft: DupHit[] = [];
+  const seen = new Set<string>();
+  const candTitle = candidate.title ? normalizeTitle(candidate.title) : "";
+  for (const card of all) {
+    if (card.slug === candidate.slug) continue;
+    let pushed: DupHit["reason"] | null = null;
+    if (candidate.doi && card.doi && card.doi === candidate.doi) pushed = "doi";
+    else if (candidate.arxivId && card.arxivId && card.arxivId === candidate.arxivId) pushed = "arxivId";
+    if (pushed) {
+      if (!seen.has(card.slug)) {
+        hard.push({ slug: card.slug, title: card.title, reason: pushed });
+        seen.add(card.slug);
+      }
+      continue;
+    }
+    if (candTitle && normalizeTitle(card.title) === candTitle) {
+      if (!seen.has(card.slug)) {
+        soft.push({ slug: card.slug, title: card.title, reason: "title" });
+        seen.add(card.slug);
+      }
+    }
+  }
+  return { hard, soft };
+}
+
+// ── Two-card merge ───────────────────────────────────────────────────
+
+function unionDedup<T>(a: readonly T[], b: readonly T[], key: (x: T) => string): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of [...a, ...b]) {
+    const k = key(item);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(item);
+  }
+  return out;
+}
+
+function preferNonEmpty(incoming: string | undefined, existing: string | undefined): string | undefined {
+  if (typeof incoming === "string" && incoming.length > 0) return incoming;
+  return existing;
+}
+
+/** Merge `incoming` into `existing`, preserving the relational spine.
+ *  Arrays union-dedup; scalars prefer non-empty `incoming` over
+ *  `existing`; `created` carried from `existing`; `updated` stamped. */
+export function mergeFull(existing: PaperCard, incoming: Partial<PaperCard>, updated: string): PaperCard {
+  const cpKey = (cp: CitationPurpose): string => `${cp.purpose}|${cp.suggestedSection ?? ""}`;
+  return {
+    slug: existing.slug,
+    title: preferNonEmpty(incoming.title, existing.title) ?? existing.title,
+    authors: unionDedup(existing.authors, incoming.authors ?? [], (x) => x),
+    year: incoming.year ?? existing.year,
+    venue: preferNonEmpty(incoming.venue, existing.venue),
+    url: preferNonEmpty(incoming.url, existing.url),
+    doi: preferNonEmpty(incoming.doi, existing.doi),
+    arxivId: preferNonEmpty(incoming.arxivId, existing.arxivId),
+    summary: preferNonEmpty(incoming.summary, existing.summary),
+    novelty: preferNonEmpty(incoming.novelty, existing.novelty),
+    claims: unionDedup(existing.claims, incoming.claims ?? [], (x) => x),
+    method: preferNonEmpty(incoming.method, existing.method),
+    evaluation: preferNonEmpty(incoming.evaluation, existing.evaluation),
+    limitations: unionDedup(existing.limitations, incoming.limitations ?? [], (x) => x),
+    relatedPapers: unionDedup(existing.relatedPapers, incoming.relatedPapers ?? [], (x) => x),
+    relationToMyWork: preferNonEmpty(incoming.relationToMyWork, existing.relationToMyWork),
+    researchContext: preferNonEmpty(incoming.researchContext, existing.researchContext),
+    citationPurposes: unionDedup(existing.citationPurposes, incoming.citationPurposes ?? [], cpKey),
+    reusableIdeas: unionDedup(existing.reusableIdeas, incoming.reusableIdeas ?? [], (x) => x),
+    nextActions: unionDedup(existing.nextActions, incoming.nextActions ?? [], (x) => x),
+    themes: unionDedup(existing.themes, incoming.themes ?? [], (x) => x),
+    created: existing.created,
+    updated,
+  };
+}

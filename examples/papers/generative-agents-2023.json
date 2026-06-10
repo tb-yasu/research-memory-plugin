@@ -1,7 +1,14 @@
 {
   "slug": "generative-agents-2023",
   "title": "Generative Agents: Interactive Simulacra of Human Behavior",
-  "authors": ["Joon Sung Park", "Joseph C. O'Brien", "Carrie J. Cai", "Meredith Ringel Morris", "Percy Liang", "Michael S. Bernstein"],
+  "authors": [
+    "Joon Sung Park",
+    "Joseph C. O'Brien",
+    "Carrie J. Cai",
+    "Meredith Ringel Morris",
+    "Percy Liang",
+    "Michael S. Bernstein"
+  ],
   "year": 2023,
   "venue": "UIST",
   "url": "https://arxiv.org/abs/2304.03442",
@@ -14,17 +21,37 @@
   ],
   "method": "追記専用の自然言語メモリストリーム＋検索スコア＝recency＋重要度＋関連度。reflection と計画のループを持つ。",
   "evaluation": "サンドボックスの町『Smallville』で 25 体のエージェントを動かし、自発的な情報伝播・関係形成・イベント調整などの創発を観察。アブレーションで recency/importance/relevance と reflection の寄与を確認。",
-  "limitations": ["検索スコアの重みは手調整。", "メモリは無制限に増大し、reflection 以外の圧縮機構がない。"],
-  "relatedPapers": ["MemGPT（OS 風メモリ階層）", "reflection／自己要約によるメモリ圧縮の後続研究"],
-  "relationToMyWork": "目指す設計に最も近く、かつ重要な対照点。彼らの検索はフラットなテキストエントリに対する手調整スコアである。本研究の freshness／relevance 制御は同じ問題を狙うが、stale／上書き済みのエントリを単に重み下げされたテキストではなく first-class に扱えるよう、構造化・圧縮可能なストアを主張する。",
+  "limitations": [
+    "検索スコアの重みは手調整。",
+    "メモリは無制限に増大し、reflection 以外の圧縮機構がない。"
+  ],
+  "relatedPapers": [
+    "MemGPT（OS 風メモリ階層）",
+    "reflection／自己要約によるメモリ圧縮の後続研究"
+  ],
+  "relationToMyWork": "Generative Agents は、記憶の鮮度と関連度をどう制御するかという課題設定の面で、本研究に最も近い先行研究であり、同時に重要な対照点でもある。その検索は、構造を持たないテキストとして並んだ記憶エントリに、人手で調整した recency・重要度・関連度のスコアを掛けるものである。本研究は同じ課題に取り組むが、stale な記憶や上書きされた記憶を単にスコアで減点するのではなく、ストアの構造の中で first-class に扱える構造化・圧縮可能なストアを主張する点で異なる。",
   "researchContext": "長期エージェント記憶のための動的圧縮コンテンツストア",
   "citationPurposes": [
-    { "purpose": "recency+importance+relevance 検索を文脈選択の先行研究として", "suggestedSection": "Related Work" },
-    { "purpose": "メモリ圧縮機構として比較する reflection", "suggestedSection": "Discussion" }
+    {
+      "purpose": "recency+importance+relevance 検索を文脈選択の先行研究として",
+      "suggestedSection": "Related Work"
+    },
+    {
+      "purpose": "メモリ圧縮機構として比較する reflection",
+      "suggestedSection": "Discussion"
+    }
   ],
-  "reusableIdeas": ["書き込み時に各メモリへ付与する重要度スコア", "圧縮としての定期的 reflection"],
-  "nextActions": ["『書き込み時の重要度』のアイデアを圧縮ストアのエントリに流用する"],
-  "themes": ["Agentic Memory"],
+  "reusableIdeas": [
+    "書き込み時に各メモリへ付与する重要度スコア",
+    "圧縮としての定期的 reflection"
+  ],
+  "nextActions": [
+    "『書き込み時の重要度』のアイデアを圧縮ストアのエントリに流用する"
+  ],
+  "themes": [
+    "Agentic Memory",
+    "Memory Retrieval"
+  ],
   "created": "2026-05-18T09:00:00.000Z",
-  "updated": "2026-05-18T09:00:00.000Z"
+  "updated": "2026-06-04T13:00:00.000Z"
 }

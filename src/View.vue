@@ -48,11 +48,73 @@ interface CitationRow {
   suggestedSection: string;
   relationToMyWork: string;
 }
+// Related Work outline — deterministic skeleton built by src/relatedwork.ts.
+interface OutlinePurpose {
+  purpose: string;
+  suggestedSection?: string;
+}
+interface OutlineEntry {
+  slug: string;
+  title: string;
+  authors: string[];
+  year?: number;
+  venue?: string;
+  gist?: string;
+  purposes: OutlinePurpose[];
+}
+interface OutlinePoint {
+  slug: string;
+  title: string;
+  text: string;
+}
+interface OutlineGroup {
+  label: string | null;
+  points: OutlinePoint[];
+  entries: OutlineEntry[];
+}
+interface RelatedWorkOutline {
+  theme: string;
+  focus: string | null;
+  paperCount: number;
+  groups: OutlineGroup[];
+  gaps: { slug: string; title: string }[];
+}
 interface ResearchProfile {
   focus: string;
   themes: string[];
   questions: string[];
   updated: string;
+}
+interface DupHit {
+  slug: string;
+  title: string;
+  reason: "doi" | "arxivId" | "title";
+}
+// The candidate payload the conflict view re-dispatches as either a
+// `mergePapers` (with `targetSlug` picked by the user) or a `save` with
+// `force: true`. Mirrors the cardFields union from the server entry.
+interface ConflictCandidate {
+  slug: string;
+  title: string;
+  authors?: string[];
+  year?: number;
+  venue?: string;
+  url?: string;
+  doi?: string;
+  arxivId?: string;
+  summary?: string;
+  novelty?: string;
+  claims?: string[];
+  method?: string;
+  evaluation?: string;
+  limitations?: string[];
+  relatedPapers?: string[];
+  relationToMyWork?: string;
+  researchContext?: string;
+  citationPurposes?: CitationPurpose[];
+  reusableIdeas?: string[];
+  nextActions?: string[];
+  themes?: string[];
 }
 // The host posts the handler's `data` payload as `selectedResult.data`
 // (mcp-server.ts gates canvas rendering on the `data` field), and the
@@ -61,8 +123,10 @@ type ResultData =
   | { view: "list"; cards: PaperCard[]; theme?: string | null; query?: string | null; yearFrom?: number | null }
   | { view: "detail"; card: PaperCard }
   | { view: "citationTable"; theme: string; rows: CitationRow[] }
+  | { view: "relatedWork"; outline: RelatedWorkOutline; markdown: string }
   | { view: "export"; format: string; scope: string | null; content: string }
-  | { view: "profile"; profile: ResearchProfile };
+  | { view: "profile"; profile: ResearchProfile }
+  | { view: "conflict"; candidate: ConflictCandidate; duplicates: DupHit[] };
 type DispatchResult = { data?: ResultData; message?: string; error?: string };
 
 export interface Props {
@@ -79,8 +143,11 @@ function sectionLabel(section: string): string {
   return t.value.sections[section] ?? section;
 }
 
-type Mode = "browse" | "citation" | "export" | "profile";
+type Mode = "browse" | "citation" | "relatedWork" | "export" | "profile" | "conflict";
 const mode = ref<Mode>("browse");
+
+const conflictCandidate = ref<ConflictCandidate | null>(null);
+const conflictDuplicates = ref<DupHit[]>([]);
 
 const EMPTY_PROFILE: ResearchProfile = { focus: "", themes: [], questions: [], updated: "" };
 
@@ -100,6 +167,8 @@ const NO_THEME = "__no_theme__";
 
 const citationRows = ref<CitationRow[]>(sd?.view === "citationTable" ? sd.rows : []);
 const citationTheme = ref(sd?.view === "citationTable" ? sd.theme : "");
+const outline = ref<RelatedWorkOutline | null>(sd?.view === "relatedWork" ? sd.outline : null);
+const outlineMarkdown = ref(sd?.view === "relatedWork" ? sd.markdown : "");
 const exportContent = ref(sd?.view === "export" ? sd.content : "");
 const exportFormat = ref(sd?.view === "export" ? sd.format : "");
 const copied = ref(false);
@@ -109,8 +178,14 @@ const editingProfile = ref(false);
 const pForm = reactive({ focus: "", themes: "", questions: "" });
 
 if (sd?.view === "citationTable") mode.value = "citation";
+else if (sd?.view === "relatedWork") mode.value = "relatedWork";
 else if (sd?.view === "export") mode.value = "export";
 else if (sd?.view === "profile") mode.value = "profile";
+else if (sd?.view === "conflict") {
+  conflictCandidate.value = sd.candidate;
+  conflictDuplicates.value = sd.duplicates;
+  mode.value = "conflict";
+}
 
 // ── derived ────────────────────────────────────────────────────────────
 const allThemes = computed(() => [...new Set(cards.value.flatMap((c) => c.themes))].sort((a, b) => a.localeCompare(b)));
@@ -199,6 +274,37 @@ async function openCitation(theme: string): Promise<void> {
   }
 }
 
+async function openRelatedWork(theme: string): Promise<void> {
+  if (!theme) return;
+  try {
+    const res = await dispatch<DispatchResult>({ kind: "relatedWork", theme });
+    if (res.data?.view === "relatedWork") {
+      outline.value = res.data.outline;
+      outlineMarkdown.value = res.data.markdown;
+      copied.value = false;
+      mode.value = "relatedWork";
+    }
+  } catch (err) {
+    log.warn("relatedWork failed", { error: String(err) });
+  }
+}
+
+async function copyOutline(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(outlineMarkdown.value);
+    copied.value = true;
+  } catch (err) {
+    log.warn("clipboard failed", { error: String(err) });
+  }
+}
+
+// Compact byline for an outline entry: （First Author et al., 2023, arXiv）
+function entryMeta(entry: OutlineEntry): string {
+  const author = entry.authors.length > 0 ? `${entry.authors[0]}${entry.authors.length > 1 ? " et al." : ""}` : "";
+  const parts = [author, entry.year !== undefined ? String(entry.year) : "", entry.venue ?? ""].filter(Boolean);
+  return parts.join(", ");
+}
+
 async function doExport(format: "bibtex" | "markdown"): Promise<void> {
   try {
     const res = await dispatch<DispatchResult>({ kind: "export", format, scope: themeFilter.value || undefined });
@@ -273,6 +379,64 @@ async function removeCard(slug: string): Promise<void> {
   } catch (err) {
     log.warn("delete failed", { error: String(err) });
   }
+}
+
+// ── conflict resolution ─────────────────────────────────────────────────
+async function openExistingFromConflict(slug: string): Promise<void> {
+  try {
+    const res = await dispatch<DispatchResult>({ kind: "read", slug });
+    if (res.data?.view === "detail") {
+      if (!cards.value.some((c) => c.slug === slug)) cards.value = [...cards.value, res.data.card];
+      selectedSlug.value = slug;
+      mode.value = "browse";
+    }
+  } catch (err) {
+    log.warn("openExistingFromConflict failed", { error: String(err) });
+  }
+}
+async function mergeIntoExisting(targetSlug: string): Promise<void> {
+  const c = conflictCandidate.value;
+  if (!c) return;
+  try {
+    const { slug: _candidateSlug, ...patch } = c;
+    void _candidateSlug;
+    const res = await dispatch<DispatchResult>({ kind: "mergePapers", targetSlug, ...patch });
+    if (res.data?.view === "detail") {
+      selectedSlug.value = targetSlug;
+      mode.value = "browse";
+      conflictCandidate.value = null;
+      conflictDuplicates.value = [];
+      await refetch();
+    }
+  } catch (err) {
+    log.warn("mergeIntoExisting failed", { error: String(err) });
+  }
+}
+async function overwriteFromConflict(): Promise<void> {
+  const c = conflictCandidate.value;
+  if (!c) return;
+  try {
+    const res = await dispatch<DispatchResult>({ kind: "save", ...c, force: true });
+    if (res.data?.view === "detail") {
+      selectedSlug.value = c.slug;
+      mode.value = "browse";
+      conflictCandidate.value = null;
+      conflictDuplicates.value = [];
+      await refetch();
+    }
+  } catch (err) {
+    log.warn("overwriteFromConflict failed", { error: String(err) });
+  }
+}
+function closeConflict(): void {
+  conflictCandidate.value = null;
+  conflictDuplicates.value = [];
+  mode.value = "browse";
+}
+function dupReasonLabel(reason: DupHit["reason"]): string {
+  if (reason === "doi") return t.value.dupReasonDoi;
+  if (reason === "arxivId") return t.value.dupReasonArxiv;
+  return t.value.dupReasonTitle;
 }
 
 // ── add / edit form ──────────────────────────────────────────────────────
@@ -398,7 +562,10 @@ onUnmounted(() => unsubscribe?.());
     <section v-if="mode === 'citation'" class="panel">
       <header class="panel-head">
         <h2>{{ t.citationTitle }} — {{ citationTheme }}</h2>
-        <button class="btn" @click="mode = 'browse'">{{ t.btnBack }}</button>
+        <div class="row-gap">
+          <button class="btn" :disabled="citationRows.length === 0" @click="openRelatedWork(citationTheme)">{{ t.btnRelatedWork }}</button>
+          <button class="btn" @click="mode = 'browse'">{{ t.btnBack }}</button>
+        </div>
       </header>
       <p v-if="citationRows.length === 0" class="hint">{{ t.emptyTable }}</p>
       <table v-else class="cite-table">
@@ -413,6 +580,46 @@ onUnmounted(() => unsubscribe?.());
       </table>
     </section>
 
+    <!-- ── Related Work outline mode ───────────────────────────────────── -->
+    <section v-else-if="mode === 'relatedWork'" class="panel">
+      <header class="panel-head">
+        <h2>{{ t.rwTitle }} — {{ outline?.theme }}</h2>
+        <div class="row-gap">
+          <button class="btn" :disabled="!outlineMarkdown" @click="copyOutline">{{ copied ? t.btnCopied : t.btnCopy }}</button>
+          <button class="btn" @click="mode = 'browse'">{{ t.btnBack }}</button>
+        </div>
+      </header>
+      <div class="rw-body">
+        <p v-if="!outline || outline.paperCount === 0" class="hint">{{ t.emptyTable }}</p>
+        <template v-else>
+          <p class="rw-hint">{{ t.rwHint }}</p>
+          <p v-if="outline.focus" class="rw-focus"><span class="rw-focus-label">{{ t.pFocus }}:</span> {{ outline.focus }}</p>
+          <section v-for="(g, gi) in outline.groups" :key="g.label ?? '__rest__'" class="rw-group">
+            <h3 class="rw-group-title">{{ gi + 1 }}. {{ g.label ?? t.rwUngrouped }} <span class="count">({{ g.entries.length }})</span></h3>
+            <div v-if="g.points.length" class="block spine">
+              <h4>{{ t.rwPoints }}</h4>
+              <ul><li v-for="p in g.points" :key="p.slug"><strong>{{ p.title }}</strong> — {{ p.text }}</li></ul>
+            </div>
+            <div class="block">
+              <h4>{{ t.rwPapers }}</h4>
+              <ul class="rw-paper-list">
+                <li v-for="e in g.entries" :key="e.slug" class="rw-paper">
+                  <span class="rw-paper-title">{{ e.title }}</span>
+                  <span v-if="entryMeta(e)" class="muted small">（{{ entryMeta(e) }}）</span>
+                  <p v-if="e.gist" class="rw-gist">{{ e.gist }}</p>
+                  <ul class="rw-purposes">
+                    <li v-for="(p, i) in e.purposes" :key="i">{{ t.rwPurpose }}: {{ p.purpose }}<span v-if="p.suggestedSection" class="muted"> — {{ sectionLabel(p.suggestedSection) }}</span></li>
+                    <li v-if="e.purposes.length === 0" class="muted">{{ t.rwNoPurpose }}</li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
+          </section>
+          <p v-if="outline.gaps.length" class="rw-gaps">⚠ {{ t.rwGaps }}: {{ outline.gaps.map((x) => x.title).join(" / ") }}</p>
+        </template>
+      </div>
+    </section>
+
     <!-- ── Export mode ─────────────────────────────────────────────────── -->
     <section v-else-if="mode === 'export'" class="panel">
       <header class="panel-head">
@@ -423,6 +630,33 @@ onUnmounted(() => unsubscribe?.());
         </div>
       </header>
       <pre class="export-pre">{{ exportContent }}</pre>
+    </section>
+
+    <!-- ── Conflict mode (duplicate detected on save) ──────────────────── -->
+    <section v-else-if="mode === 'conflict'" class="panel">
+      <header class="panel-head">
+        <h2>{{ t.secConflict }}</h2>
+        <button class="btn" @click="closeConflict">{{ t.btnBack }}</button>
+      </header>
+      <p class="hint">{{ t.conflictHint }}</p>
+      <p v-if="conflictCandidate" class="conflict-candidate">
+        <span class="muted">{{ t.conflictNew }}:</span>
+        <strong>{{ conflictCandidate.title }}</strong>
+        <span class="muted"> ({{ conflictCandidate.slug }})</span>
+      </p>
+      <ul class="conflict-list">
+        <li v-for="d in conflictDuplicates" :key="d.slug" class="conflict-row">
+          <div class="conflict-row-info">
+            <strong>{{ d.title }}</strong>
+            <span class="muted"> ({{ d.slug }}) · {{ dupReasonLabel(d.reason) }}</span>
+          </div>
+          <div class="row-gap">
+            <button class="btn" @click="openExistingFromConflict(d.slug)">{{ t.btnOpenExisting }}</button>
+            <button class="btn primary" @click="mergeIntoExisting(d.slug)">{{ t.btnMergeInto }}</button>
+            <button class="btn warn" @click="overwriteFromConflict">{{ t.btnOverwrite }}</button>
+          </div>
+        </li>
+      </ul>
     </section>
 
     <!-- ── Research profile mode ───────────────────────────────────────── -->
@@ -468,6 +702,7 @@ onUnmounted(() => unsubscribe?.());
           </select>
           <input v-model="yearFromInput" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" class="year-input" :placeholder="t.yearFrom" :title="t.yearFrom" />
           <button class="btn" :disabled="!themeFilter" :title="t.btnCitation" @click="openCitation(themeFilter)">{{ t.btnCitation }}</button>
+          <button class="btn" :disabled="!themeFilter" :title="t.rwTitle" @click="openRelatedWork(themeFilter)">{{ t.btnRelatedWork }}</button>
           <button class="btn" @click="doExport('bibtex')">{{ t.btnExportBibtex }}</button>
           <button class="btn" :disabled="cards.length === 0" @click="exportExcel">{{ t.btnExportExcel }}</button>
           <button class="btn" @click="openProfile">{{ t.profileBtn }}</button>
@@ -672,6 +907,40 @@ onUnmounted(() => unsubscribe?.());
 .btn.danger {
   color: #dc2626;
   border-color: #fca5a5;
+}
+.btn.warn {
+  color: #b45309;
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+.btn.warn:hover:not(:disabled) {
+  background: #fef3c7;
+}
+.conflict-candidate {
+  margin: 0.5rem 0 1rem;
+  font-size: 0.95rem;
+}
+.conflict-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.conflict-row {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.4rem;
+  padding: 0.7rem 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+.conflict-row-info {
+  font-size: 0.92rem;
+  flex: 1;
+  min-width: 0;
 }
 .focus-banner {
   padding: 0.4rem 1rem;
@@ -917,6 +1186,69 @@ onUnmounted(() => unsubscribe?.());
 .cite-table th {
   background: #fafafa;
   font-weight: 600;
+}
+.rw-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.75rem 1.5rem 1.5rem;
+}
+.rw-hint {
+  margin: 0.25rem 0 0;
+  color: #9ca3af;
+  font-size: 0.78rem;
+}
+.rw-focus {
+  margin: 0.6rem 0 0;
+  padding: 0.4rem 0.75rem;
+  background: #f8faff;
+  border-left: 3px solid #4338ca;
+  border-radius: 0 0.25rem 0.25rem 0;
+  font-size: 0.85rem;
+}
+.rw-focus-label {
+  color: #4338ca;
+  font-weight: 600;
+}
+.rw-group {
+  margin-top: 1.25rem;
+}
+.rw-group-title {
+  margin: 0;
+  font-size: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 0.25rem;
+}
+.rw-paper-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.rw-paper {
+  margin: 0.5rem 0;
+}
+.rw-paper-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.rw-gist {
+  margin: 0.1rem 0 0;
+  color: #4b5563;
+  font-size: 0.82rem;
+}
+.rw-purposes {
+  margin: 0.15rem 0 0;
+  padding-left: 1.2rem;
+  font-size: 0.85rem;
+}
+.rw-gaps {
+  margin-top: 1.25rem;
+  padding: 0.5rem 0.75rem;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 0.25rem;
+  color: #b45309;
+  font-size: 0.82rem;
 }
 .export-pre {
   flex: 1;

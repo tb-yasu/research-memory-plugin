@@ -40,7 +40,7 @@ function memFileOps() {
   return { store, ops };
 }
 
-function makeRuntime() {
+function makeRuntime(fetch?: (url: string) => Promise<Response>) {
   const data = memFileOps();
   const noop = () => undefined;
   const runtime = {
@@ -48,12 +48,13 @@ function makeRuntime() {
     files: { data: data.ops, config: memFileOps().ops },
     log: { debug: noop, info: noop, warn: noop, error: noop },
     locale: "en",
+    fetch,
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return { plugin: createPlugin(runtime as any), store: data.store };
 }
 
-test("save → list → read → update(merge) → citationTable → export → delete", async () => {
+test("save → list → read → update(merge) → citationTable → relatedWork → export → delete", async () => {
   const { plugin, store } = makeRuntime();
 
   const saved = (await plugin.manageLiterature({
@@ -84,6 +85,16 @@ test("save → list → read → update(merge) → citationTable → export → 
   assert.equal(ct.data.rows.length, 1);
   assert.equal(ct.data.rows[0].purpose, "existing long-term memory design");
 
+  // relatedWork: the co-theme "Memory" (added by the update above) becomes the group.
+  const rw = (await plugin.manageLiterature({ kind: "relatedWork", theme: "Agentic Memory" })) as any;
+  assert.equal(rw.data.view, "relatedWork");
+  assert.equal(rw.data.outline.paperCount, 1);
+  assert.equal(rw.data.outline.groups[0].label, "Memory");
+  assert.deepEqual(rw.data.outline.groups[0].points, [{ slug: "mem-a", title: "Long-term memory", text: "baseline for my content store" }]);
+  assert.match(rw.data.markdown, /# Related Work アウトライン — Agentic Memory/);
+  assert.match(rw.jsonData, /引用目的: existing long-term memory design（Related Work）/);
+  assert.equal(store.get("related-work/agentic-memory.md"), rw.data.markdown, "outline markdown persisted per theme");
+
   const bib = (await plugin.manageLiterature({ kind: "export", format: "bibtex" })) as any;
   assert.match(bib.data.content, /@article\{doe2024,/);
 
@@ -102,6 +113,116 @@ test("update on a missing slug returns not-found", async () => {
   const { plugin } = makeRuntime();
   const res = (await plugin.manageLiterature({ kind: "update", slug: "ghost", title: "x" })) as any;
   assert.ok(res.error, "should return an error envelope");
+});
+
+test("fetchMetadata(arxivId) routes through runtime.fetch and returns a patch envelope", async () => {
+  const xml = `<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <entry>
+    <id>http://arxiv.org/abs/2401.99999v1</id>
+    <published>2024-05-01T00:00:00Z</published>
+    <title>Test arXiv paper</title>
+    <summary>A short abstract.</summary>
+    <author><name>Eve Author</name></author>
+  </entry>
+</feed>`;
+  const fakeFetch = async (_url: string) => new Response(xml, { status: 200 });
+  const { plugin } = makeRuntime(fakeFetch);
+  const res = (await plugin.manageLiterature({ kind: "fetchMetadata", arxivId: "2401.99999" })) as any;
+  assert.equal(res.data, undefined, "fetchMetadata returns no canvas data (LLM-only payload)");
+  assert.equal(res.jsonData.title, "Test arXiv paper");
+  assert.equal(res.jsonData.year, 2024);
+  assert.deepEqual(res.jsonData.authors, ["Eve Author"]);
+  assert.equal(res.jsonData.arxivId, "2401.99999");
+});
+
+test("fetchMetadata without arxivId or doi returns a 400 error envelope", async () => {
+  const { plugin } = makeRuntime();
+  const res = (await plugin.manageLiterature({ kind: "fetchMetadata" })) as any;
+  assert.equal(res.status, 400);
+  assert.match(res.error, /arxivId or doi/);
+});
+
+test("save blocks a second card with the same DOI; force=true overrides; mergePapers preserves spine", async () => {
+  const { plugin, store } = makeRuntime();
+
+  // Round 1: first save succeeds, spine attached.
+  const first = (await plugin.manageLiterature({
+    kind: "save",
+    slug: "mem-a",
+    title: "Long-term memory",
+    authors: ["Jane Doe"],
+    year: 2024,
+    doi: "10.1234/example",
+    themes: ["Agentic Memory"],
+    relationToMyWork: "baseline for my content store",
+    citationPurposes: [{ purpose: "existing long-term memory design", suggestedSection: "Related Work" }],
+  })) as any;
+  assert.equal(first.data.view, "detail");
+
+  // Round 2: a second slug with the same DOI must be blocked.
+  const blocked = (await plugin.manageLiterature({
+    kind: "save",
+    slug: "mem-a-redux",
+    title: "Long-term memory (variant)",
+    doi: "10.1234/example",
+    themes: ["Memory"],
+  })) as any;
+  assert.equal(blocked.status, 409);
+  assert.equal(blocked.data.view, "conflict");
+  assert.equal(blocked.data.duplicates.length, 1);
+  assert.equal(blocked.data.duplicates[0].slug, "mem-a");
+  assert.equal(blocked.data.duplicates[0].reason, "doi");
+  assert.equal(store.has("papers/mem-a-redux.json"), false, "blocked save must not write a file");
+
+  // Round 3: mergePapers preserves the relational spine while adopting the new themes / year.
+  const merged = (await plugin.manageLiterature({
+    kind: "mergePapers",
+    targetSlug: "mem-a",
+    title: "Long-term memory (variant)",
+    year: 2025,
+    themes: ["Memory"],
+  })) as any;
+  assert.equal(merged.data.view, "detail");
+  assert.equal(merged.data.card.slug, "mem-a");
+  assert.equal(merged.data.card.year, 2025);
+  assert.deepEqual(merged.data.card.themes, ["Agentic Memory", "Memory"]);
+  assert.equal(merged.data.card.relationToMyWork, "baseline for my content store", "spine preserved by mergeFull");
+  assert.equal(merged.data.card.citationPurposes.length, 1, "citation purposes preserved");
+});
+
+test("save with force=true bypasses the duplicate check", async () => {
+  const { plugin, store } = makeRuntime();
+  await plugin.manageLiterature({ kind: "save", slug: "p1", title: "Paper", arxivId: "2401.99999" });
+  const forced = (await plugin.manageLiterature({
+    kind: "save",
+    slug: "p2",
+    title: "Paper variant",
+    arxivId: "2401.99999",
+    force: true,
+  })) as any;
+  assert.equal(forced.data?.view, "detail", "force=true bypasses the conflict block");
+  assert.ok(store.has("papers/p2.json"), "forced save persists the new slug");
+});
+
+test("save with only a title near-match returns success + a warning field", async () => {
+  const { plugin } = makeRuntime();
+  await plugin.manageLiterature({ kind: "save", slug: "p1", title: "MemGPT: Towards LLMs as Operating Systems" });
+  // No DOI or arxivId — only a normalized title collision.
+  const res = (await plugin.manageLiterature({
+    kind: "save",
+    slug: "p2",
+    title: "memgpt towards llms as operating systems",
+  })) as any;
+  assert.equal(res.data?.view, "detail", "soft match still saves");
+  assert.ok(Array.isArray(res.warning), "warning array attached for the soft match");
+  assert.match(res.warning[0], /p1/);
+});
+
+test("mergePapers returns not-found when the target slug doesn't exist", async () => {
+  const { plugin } = makeRuntime();
+  const res = (await plugin.manageLiterature({ kind: "mergePapers", targetSlug: "ghost", title: "x" })) as any;
+  assert.equal(res.status, 404);
 });
 
 test("setProfile then getProfile round-trips the research profile (partial merge preserves themes)", async () => {

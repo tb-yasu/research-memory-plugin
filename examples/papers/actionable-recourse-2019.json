@@ -1,7 +1,11 @@
 {
   "slug": "actionable-recourse-2019",
   "title": "Actionable Recourse in Linear Classification",
-  "authors": ["Berk Ustun", "Alexander Spangher", "Yang Liu"],
+  "authors": [
+    "Berk Ustun",
+    "Alexander Spangher",
+    "Yang Liu"
+  ],
   "year": 2019,
   "venue": "FAT* (ACM FAccT)",
   "url": "https://arxiv.org/abs/1809.06514",
@@ -14,17 +18,36 @@
   ],
   "method": "実行可能特徴量集合に対する混合整数計画（特徴量ごとのコスト付き）と flipset 生成。",
   "evaluation": "実データ（与信など）の線形モデルで、個人ごとの最小コスト flipset を生成し、recourse を与えられない割合を定量化。",
-  "limitations": ["線形モデルのみ。", "コスト関数は既知かつ特徴量ごとに分離可能な行動コストを仮定する。"],
-  "relatedPapers": ["Wachter et al. 2017（反実仮想説明の起源）", "DiCE（多様な反実仮想）"],
-  "relationToMyWork": "本研究の反実仮想 recourse が依拠する、recourse コストの基礎的定義。彼らの実行可能コストの枠組みを再利用しつつ、線形モデルを超えて拡張する。",
+  "limitations": [
+    "線形モデルのみ。",
+    "コスト関数は既知かつ特徴量ごとに分離可能な行動コストを仮定する。"
+  ],
+  "relatedPapers": [
+    "Wachter et al. 2017（反実仮想説明の起源）",
+    "DiCE（多様な反実仮想）"
+  ],
+  "relationToMyWork": "Ustun らの actionable recourse は、本研究の反実仮想 recourse が依拠する recourse コストの基礎的な定義を与える。本研究はこの実行可能コストの枠組みを再利用しつつ、線形モデルを超えた設定へ拡張する。",
   "researchContext": "現実的で相関のある行動コストの下での反実仮想 recourse",
   "citationPurposes": [
-    { "purpose": "actionable recourse と recourse コストの定義", "suggestedSection": "Introduction" },
-    { "purpose": "最小コスト行動の整数計画ベースライン", "suggestedSection": "Method" }
+    {
+      "purpose": "actionable recourse と recourse コストの定義",
+      "suggestedSection": "Introduction"
+    },
+    {
+      "purpose": "最小コスト行動の整数計画ベースライン",
+      "suggestedSection": "Method"
+    }
   ],
-  "reusableIdeas": ["実行可能／不変の特徴量分割", "recourse 目的としての特徴量ごとのコスト"],
-  "nextActions": ["彼らのコストモデルが相関のある特徴量に拡張できるか確認する"],
-  "themes": ["Counterfactual Recourse"],
+  "reusableIdeas": [
+    "実行可能／不変の特徴量分割",
+    "recourse 目的としての特徴量ごとのコスト"
+  ],
+  "nextActions": [
+    "彼らのコストモデルが相関のある特徴量に拡張できるか確認する"
+  ],
+  "themes": [
+    "Counterfactual Recourse"
+  ],
   "created": "2026-05-15T09:00:00.000Z",
-  "updated": "2026-05-15T09:00:00.000Z"
+  "updated": "2026-06-04T13:00:00.000Z"
 }
