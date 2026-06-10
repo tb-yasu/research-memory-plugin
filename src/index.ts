@@ -18,6 +18,7 @@ import { buildRelatedWorkOutline, relatedWorkToMarkdown, themeSlug } from "./rel
 import { EMPTY_PROFILE, mergeProfile, parseProfile, serializeProfile, type ProfilePatch, type ResearchProfile } from "./profile";
 import { fetchArxiv, fetchDoi, MetadataError } from "./metadata";
 import { annotateCandidates, searchSemanticScholar } from "./papersearch";
+import { fetchArxivFullText } from "./fulltext";
 
 export { TOOL_DEFINITION };
 
@@ -64,6 +65,7 @@ const Args = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("setProfile"), focus: z.string().optional(), themes: z.array(z.string()).optional(), questions: z.array(z.string()).optional() }),
   z.object({ kind: z.literal("fetchMetadata"), arxivId: z.string().optional(), doi: z.string().optional() }),
   z.object({ kind: z.literal("searchPapers"), query: z.string(), limit: z.number().int().optional(), yearFrom: z.number().int().optional(), yearTo: z.number().int().optional() }),
+  z.object({ kind: z.literal("fetchFullText"), arxivId: z.string() }),
   z.object({ kind: z.literal("mergePapers"), ...cardFields, targetSlug: z.string() }),
 ]);
 
@@ -353,6 +355,19 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
             return {
               message: `Found ${candidates.length} candidate(s) for "${args.query}". Present them as a numbered list (mark existingSlugs entries as already registered) and ask the user which to register — do NOT save without an explicit selection.`,
               jsonData: candidates,
+            };
+          } catch (err) {
+            if (err instanceof MetadataError) return { error: err.message, status: err.code === "not-found" ? 404 : 502 };
+            return { error: String(err), status: 500 };
+          }
+        }
+        case "fetchFullText": {
+          try {
+            const { source, text } = await fetchArxivFullText(args.arxivId, fetch);
+            log.info("full text fetched", { arxivId: args.arxivId, source, chars: text.length });
+            return {
+              message: `Fetched the body of arXiv:${args.arxivId} from ${source} (${text.length} chars; references stripped, middle elided). Extract the FULL Ochiai template from it, then call save.`,
+              jsonData: { source, text },
             };
           } catch (err) {
             if (err instanceof MetadataError) return { error: err.message, status: err.code === "not-found" ? 404 : 502 };
