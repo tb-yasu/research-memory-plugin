@@ -17,6 +17,7 @@ import { citationTable, toBibTeX, toMarkdownBundle, toReferenceList } from "./ci
 import { buildRelatedWorkOutline, relatedWorkToMarkdown, themeSlug } from "./relatedwork";
 import { EMPTY_PROFILE, mergeProfile, parseProfile, serializeProfile, type ProfilePatch, type ResearchProfile } from "./profile";
 import { fetchArxiv, fetchDoi, MetadataError } from "./metadata";
+import { annotateCandidates, searchSemanticScholar } from "./papersearch";
 
 export { TOOL_DEFINITION };
 
@@ -62,6 +63,7 @@ const Args = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("getProfile") }),
   z.object({ kind: z.literal("setProfile"), focus: z.string().optional(), themes: z.array(z.string()).optional(), questions: z.array(z.string()).optional() }),
   z.object({ kind: z.literal("fetchMetadata"), arxivId: z.string().optional(), doi: z.string().optional() }),
+  z.object({ kind: z.literal("searchPapers"), query: z.string(), limit: z.number().int().optional(), yearFrom: z.number().int().optional() }),
   z.object({ kind: z.literal("mergePapers"), ...cardFields, targetSlug: z.string() }),
 ]);
 
@@ -335,6 +337,23 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
             // No `data` field — the canvas stays untouched. The LLM uses
             // `jsonData` to compose a follow-up save call.
             return { message: `Fetched metadata for ${label}: "${patch.title}".`, jsonData: patch };
+          } catch (err) {
+            if (err instanceof MetadataError) return { error: err.message, status: err.code === "not-found" ? 404 : 502 };
+            return { error: String(err), status: 500 };
+          }
+        }
+        case "searchPapers": {
+          try {
+            const found = await searchSemanticScholar(args.query, { limit: args.limit, yearFrom: args.yearFrom }, fetch);
+            // Flag candidates the store already holds so the LLM marks
+            // them 登録済み instead of re-saving. No `data` field — the
+            // canvas stays untouched; the numbered list lives in chat.
+            const candidates = annotateCandidates(found, await listCards());
+            log.info("paper search", { query: args.query, hits: candidates.length });
+            return {
+              message: `Found ${candidates.length} candidate(s) for "${args.query}". Present them as a numbered list (mark existingSlugs entries as already registered) and ask the user which to register — do NOT save without an explicit selection.`,
+              jsonData: candidates,
+            };
           } catch (err) {
             if (err instanceof MetadataError) return { error: err.message, status: err.code === "not-found" ? 404 : 502 };
             return { error: String(err), status: 500 };
