@@ -32,11 +32,26 @@ const S2_FIELDS = "title,abstract,year,venue,url,citationCount,externalIds,autho
 
 const TIMEOUT_MS = 15_000;
 export const DEFAULT_LIMIT = 10;
-export const MAX_LIMIT = 25;
+// One Semantic Scholar relevance-search request returns at most 100 hits;
+// that is also our ceiling — paginating further would flood the LLM
+// context (candidates ride back whole in jsonData, abstracts included).
+export const MAX_LIMIT = 100;
+// Candidate summaries are a triage gist, not the stored abstract — at
+// 100 hits a full abstract each would dwarf the context. `save` should
+// re-fetch the full abstract via fetchMetadata when an id is available.
+export const GIST_MAX_CHARS = 600;
 
 export function clampLimit(limit: number | undefined): number {
   if (limit === undefined || !Number.isFinite(limit)) return DEFAULT_LIMIT;
   return Math.min(Math.max(Math.trunc(limit), 1), MAX_LIMIT);
+}
+
+/** Cut at the last word boundary before GIST_MAX_CHARS, with an ellipsis. */
+export function truncateGist(text: string): string {
+  if (text.length <= GIST_MAX_CHARS) return text;
+  const head = text.slice(0, GIST_MAX_CHARS);
+  const lastSpace = head.lastIndexOf(" ");
+  return (lastSpace > 0 ? head.slice(0, lastSpace) : head) + "…";
 }
 
 interface S2Author {
@@ -68,7 +83,7 @@ export function parseSemanticScholarResponse(body: S2Response): PaperCandidate[]
     if (paper.venue) candidate.venue = paper.venue;
     if (paper.url) candidate.url = paper.url;
     if (typeof paper.citationCount === "number") candidate.citationCount = paper.citationCount;
-    if (paper.abstract) candidate.summary = paper.abstract.replace(/\s+/g, " ").trim();
+    if (paper.abstract) candidate.summary = truncateGist(paper.abstract.replace(/\s+/g, " ").trim());
     const ext = paper.externalIds ?? {};
     if (ext.DOI) candidate.doi = String(ext.DOI);
     if (ext.ArXiv) candidate.arxivId = String(ext.ArXiv);

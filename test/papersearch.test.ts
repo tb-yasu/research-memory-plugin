@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { MetadataError } from "../src/metadata";
-import { annotateCandidates, clampLimit, DEFAULT_LIMIT, MAX_LIMIT, parseSemanticScholarResponse, searchSemanticScholar } from "../src/papersearch";
+import { annotateCandidates, clampLimit, DEFAULT_LIMIT, GIST_MAX_CHARS, MAX_LIMIT, parseSemanticScholarResponse, searchSemanticScholar, truncateGist } from "../src/papersearch";
 import { PaperCardSchema } from "../src/card";
 
 // ── parser ────────────────────────────────────────────────────────────
@@ -66,7 +66,28 @@ test("clampLimit defaults, truncates, and clamps to [1, MAX_LIMIT]", () => {
   assert.equal(clampLimit(5.9), 5);
   assert.equal(clampLimit(0), 1);
   assert.equal(clampLimit(-3), 1);
-  assert.equal(clampLimit(100), MAX_LIMIT);
+  assert.equal(clampLimit(100), 100);
+  assert.equal(clampLimit(250), MAX_LIMIT);
+});
+
+// ── gist truncation ───────────────────────────────────────────────────
+
+test("truncateGist keeps short text verbatim and cuts long text at a word boundary", () => {
+  assert.equal(truncateGist("short abstract"), "short abstract");
+  const exact = "a".repeat(GIST_MAX_CHARS);
+  assert.equal(truncateGist(exact), exact);
+
+  const long = ("word ".repeat(200)).trim(); // 999 chars
+  const gist = truncateGist(long);
+  assert.ok(gist.length <= GIST_MAX_CHARS + 1);
+  assert.ok(gist.endsWith("…"));
+  assert.ok(!gist.includes("  "), "no mid-word cut leaving stray spaces");
+});
+
+test("parseSemanticScholarResponse truncates over-long abstracts to a gist", () => {
+  const [hit] = parseSemanticScholarResponse({ data: [{ title: "Long One", abstract: "lorem ".repeat(300) }] });
+  assert.ok((hit.summary ?? "").length <= GIST_MAX_CHARS + 1);
+  assert.ok((hit.summary ?? "").endsWith("…"));
 });
 
 // ── fetch wrapper ─────────────────────────────────────────────────────
