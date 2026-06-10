@@ -24,6 +24,14 @@ export interface PaperCandidate {
 export interface SearchOptions {
   limit?: number;
   yearFrom?: number;
+  yearTo?: number;
+}
+
+/** Semantic Scholar `year` param: "2020-2023" / "2020-" / "-2023";
+ *  undefined when no bound is given (search all years). */
+export function buildYearParam(yearFrom: number | undefined, yearTo: number | undefined): string | undefined {
+  if (yearFrom === undefined && yearTo === undefined) return undefined;
+  return `${yearFrom ?? ""}-${yearTo ?? ""}`;
 }
 
 const S2_ENDPOINT = "https://api.semanticscholar.org/graph/v1/paper/search";
@@ -108,7 +116,8 @@ export async function searchSemanticScholar(query: string, opts: SearchOptions, 
   const q = query.trim();
   if (!q) throw new MetadataError("parse", "searchPapers requires a non-empty query");
   const params = new URLSearchParams({ query: q, limit: String(clampLimit(opts.limit)), fields: S2_FIELDS });
-  if (opts.yearFrom !== undefined) params.set("year", `${opts.yearFrom}-`);
+  const year = buildYearParam(opts.yearFrom, opts.yearTo);
+  if (year !== undefined) params.set("year", year);
   let res: Response;
   try {
     res = await fetchImpl(`${S2_ENDPOINT}?${params.toString()}`, { timeoutMs: TIMEOUT_MS, allowedHosts: S2_HOSTS });

@@ -63,7 +63,7 @@ const Args = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("getProfile") }),
   z.object({ kind: z.literal("setProfile"), focus: z.string().optional(), themes: z.array(z.string()).optional(), questions: z.array(z.string()).optional() }),
   z.object({ kind: z.literal("fetchMetadata"), arxivId: z.string().optional(), doi: z.string().optional() }),
-  z.object({ kind: z.literal("searchPapers"), query: z.string(), limit: z.number().int().optional(), yearFrom: z.number().int().optional() }),
+  z.object({ kind: z.literal("searchPapers"), query: z.string(), limit: z.number().int().optional(), yearFrom: z.number().int().optional(), yearTo: z.number().int().optional() }),
   z.object({ kind: z.literal("mergePapers"), ...cardFields, targetSlug: z.string() }),
 ]);
 
@@ -344,7 +344,7 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
         }
         case "searchPapers": {
           try {
-            const found = await searchSemanticScholar(args.query, { limit: args.limit, yearFrom: args.yearFrom }, fetch);
+            const found = await searchSemanticScholar(args.query, { limit: args.limit, yearFrom: args.yearFrom, yearTo: args.yearTo }, fetch);
             // Flag candidates the store already holds so the LLM marks
             // them 登録済み instead of re-saving. No `data` field — the
             // canvas stays untouched; the numbered list lives in chat.

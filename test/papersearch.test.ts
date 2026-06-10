@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { MetadataError } from "../src/metadata";
-import { annotateCandidates, clampLimit, DEFAULT_LIMIT, GIST_MAX_CHARS, MAX_LIMIT, parseSemanticScholarResponse, searchSemanticScholar, truncateGist } from "../src/papersearch";
+import { annotateCandidates, buildYearParam, clampLimit, DEFAULT_LIMIT, GIST_MAX_CHARS, MAX_LIMIT, parseSemanticScholarResponse, searchSemanticScholar, truncateGist } from "../src/papersearch";
 import { PaperCardSchema } from "../src/card";
 
 // ── parser ────────────────────────────────────────────────────────────
@@ -107,6 +107,23 @@ test("searchSemanticScholar routes through the injected fetch with query/limit/f
   assert.equal(url.searchParams.get("year"), "2023-");
   assert.match(url.searchParams.get("fields") ?? "", /externalIds/);
   assert.equal(candidates.length, 2);
+});
+
+test("buildYearParam covers from-only, to-only, range, and the unbounded case", () => {
+  assert.equal(buildYearParam(undefined, undefined), undefined);
+  assert.equal(buildYearParam(2024, undefined), "2024-");
+  assert.equal(buildYearParam(undefined, 2023), "-2023");
+  assert.equal(buildYearParam(2020, 2023), "2020-2023");
+});
+
+test("searchSemanticScholar passes a year range when yearFrom and yearTo are both given", async () => {
+  const calls: string[] = [];
+  const fakeFetch = async (url: string) => {
+    calls.push(url);
+    return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  await searchSemanticScholar("fm-index", { yearFrom: 2020, yearTo: 2023 }, fakeFetch);
+  assert.equal(new URL(calls[0]).searchParams.get("year"), "2020-2023");
 });
 
 test("searchSemanticScholar omits the year param when yearFrom is not given", async () => {
