@@ -12,7 +12,7 @@ function card(slug: string, fields: Record<string, unknown> = {}): PaperCard {
 
 const PROFILE: ResearchProfile = { focus: "compressed agent memory", themes: ["Agentic Memory"], questions: ["dynamic index?"], updated: "2026-01-01T00:00:00Z" };
 
-test("material exposes only ideation fields — bibliographic/writing-time fields excluded", () => {
+test("material exposes ideation + bibliographic fields — writing-time fields excluded", () => {
   const rich = card("a", {
     authors: ["Jane Doe"],
     venue: "NeurIPS",
@@ -35,8 +35,12 @@ test("material exposes only ideation fields — bibliographic/writing-time field
   });
   const [m] = gatherIdeationMaterial([rich], EMPTY_PROFILE).papers;
   const keys = Object.keys(m).sort();
-  assert.deepEqual(keys, ["arxivId", "evaluation", "limitations", "method", "nextActions", "novelty", "relationToMyWork", "reusableIdeas", "slug", "summary", "themes", "title", "year"].sort());
-  for (const banned of ["authors", "venue", "url", "doi", "citationPurposes", "relatedPapers", "claims", "researchContext", "created", "updated"]) {
+  // Bibliographic fields (authors/venue/url/doi/arxivId) are included for
+  // the per-idea 参考文献 element; writing-time fields stay excluded.
+  assert.deepEqual(keys, ["arxivId", "authors", "doi", "evaluation", "limitations", "method", "nextActions", "novelty", "relationToMyWork", "reusableIdeas", "slug", "summary", "themes", "title", "url", "venue", "year"].sort());
+  assert.deepEqual(m.authors, ["Jane Doe"]);
+  assert.equal(m.venue, "NeurIPS");
+  for (const banned of ["citationPurposes", "relatedPapers", "claims", "researchContext", "created", "updated"]) {
     assert.ok(!(banned in m), `${banned} must not leak into ideation material`);
   }
 });

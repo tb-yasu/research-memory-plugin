@@ -7,17 +7,22 @@
 import type { PaperCard } from "./card";
 import type { ResearchProfile } from "./profile";
 
-/** Per-card ideation fuel. Deliberately EXCLUDED card fields:
- *  authors/venue/url/doi/arxivId (bibliographic — irrelevant to ideation;
- *  the handler surfaces arxivId separately for the full-text mining step),
- *  citationPurposes (a writing-time concern), relatedPapers (titles of
- *  papers NOT in the store — ungroundable), claims (sub-bullets subsumed
- *  by novelty), researchContext (redundant with profile + relation). */
+/** Per-card ideation fuel + the bibliographic fields needed for each
+ *  idea's 参考文献 element (authors/venue/url/doi/arxivId; arxivId also
+ *  drives the idea-miner full-text pass). Deliberately EXCLUDED card
+ *  fields: citationPurposes (a writing-time concern), relatedPapers
+ *  (titles of papers NOT in the store — ungroundable), claims
+ *  (sub-bullets subsumed by novelty), researchContext (redundant with
+ *  profile + relation). */
 export interface IdeationCardMaterial {
   slug: string;
   title: string;
+  authors: string[];
   year?: number;
-  arxivId?: string; // for the idea-miner full-text pass, not for ideation prose
+  venue?: string;
+  url?: string;
+  doi?: string;
+  arxivId?: string;
   summary?: string;
   novelty?: string;
   method?: string;
@@ -55,7 +60,11 @@ function toMaterial(card: PaperCard): IdeationCardMaterial {
   return {
     slug: card.slug,
     title: card.title,
+    authors: card.authors,
     year: card.year,
+    venue: card.venue,
+    url: card.url,
+    doi: card.doi,
     arxivId: card.arxivId,
     summary: oneLine(card.summary),
     novelty: oneLine(card.novelty),
