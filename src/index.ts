@@ -19,10 +19,13 @@ import { EMPTY_PROFILE, mergeProfile, parseProfile, serializeProfile, type Profi
 import { fetchArxiv, fetchDoi, MetadataError } from "./metadata";
 import { annotateCandidates, searchSemanticScholar } from "./papersearch";
 import { fetchArxivFullText } from "./fulltext";
+import { IdeaSchema, IdeaStatusSchema, mergeIdea, parseIdea, serializeIdea, type Idea, type IdeaPatch } from "./idea";
+import { gatherIdeationMaterial } from "./ideate";
 
 export { TOOL_DEFINITION };
 
 const PAPERS_DIR = "papers";
+const IDEAS_DIR = "ideas";
 const PROFILE_FILE = "profile.json";
 const CHANGED = "changed";
 
@@ -52,6 +55,19 @@ const cardFields = {
   themes: z.array(z.string()).optional(),
 };
 
+// Optional idea fields shared by `saveIdea` and `updateIdea`, mirroring
+// `cardFields` above. `saveIdea` overrides slug+title+description to
+// required below.
+const ideaFields = {
+  title: z.string().optional(),
+  description: z.string().optional(),
+  motivation: z.string().optional(),
+  firstExperiment: z.string().optional(),
+  sourcePapers: z.array(z.string()).optional(),
+  themes: z.array(z.string()).optional(),
+  status: IdeaStatusSchema.optional(),
+};
+
 const Args = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("list"), query: z.string().optional(), theme: z.string().optional(), yearFrom: z.number().int().optional(), sort: z.enum(["recency", "relevance", "title"]).optional() }),
   z.object({ kind: z.literal("read"), slug: z.string() }),
@@ -67,14 +83,25 @@ const Args = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("searchPapers"), query: z.string(), limit: z.number().int().optional(), yearFrom: z.number().int().optional(), yearTo: z.number().int().optional() }),
   z.object({ kind: z.literal("fetchFullText"), arxivId: z.string() }),
   z.object({ kind: z.literal("mergePapers"), ...cardFields, targetSlug: z.string() }),
+  z.object({ kind: z.literal("ideate"), slugs: z.array(z.string()).optional(), theme: z.string().optional() }),
+  z.object({ kind: z.literal("saveIdea"), ...ideaFields, slug: z.string(), title: z.string(), description: z.string(), force: z.boolean().optional() }),
+  z.object({ kind: z.literal("updateIdea"), ...ideaFields, slug: z.string() }),
+  z.object({ kind: z.literal("deleteIdea"), slug: z.string() }),
+  z.object({ kind: z.literal("listIdeas"), theme: z.string().optional(), status: IdeaStatusSchema.optional() }),
 ]);
 
 type SaveArgs = Extract<z.infer<typeof Args>, { kind: "save" }>;
 type UpdateArgs = Extract<z.infer<typeof Args>, { kind: "update" }>;
 type MergeArgs = Extract<z.infer<typeof Args>, { kind: "mergePapers" }>;
+type SaveIdeaArgs = Extract<z.infer<typeof Args>, { kind: "saveIdea" }>;
+type UpdateIdeaArgs = Extract<z.infer<typeof Args>, { kind: "updateIdea" }>;
 
 function paperPath(slug: string): string {
   return `${PAPERS_DIR}/${slug}.json`;
+}
+
+function ideaPath(slug: string): string {
+  return `${IDEAS_DIR}/${slug}.json`;
 }
 
 function patchFromArgs(a: UpdateArgs): CardPatch {
@@ -100,6 +127,23 @@ function patchFromArgs(a: UpdateArgs): CardPatch {
     nextActions: a.nextActions,
     themes: a.themes,
   };
+}
+
+/** The LLM-facing procedure for `ideate` — mining via subagents, then
+ *  grounded synthesis. Pure so tests can assert the conditional notes. */
+export function ideationMessage(input: { paperCount: number; minable: string[]; missing: string[]; profileEmpty: boolean; thinCards: string[] }): string {
+  const parts = [
+    `Ideation material for ${input.paperCount} paper(s) + the research profile is in jsonData.`,
+    input.missing.length > 0 ? `${input.missing.length} requested slug(s) not found: ${input.missing.join(", ")} — tell the user.` : "",
+    input.profileEmpty ? "The research profile is EMPTY — ideas can only be grounded in the papers; offer setProfile." : "",
+    input.thinCards.length > 0 ? `Thin cards (no limitations/reusableIdeas/nextActions recorded): ${input.thinCards.join(", ")} — their material is limited.` : "",
+    "PROCEDURE: (1) MINE — unless the user asked for a cards-only quick pass, spawn the `idea-miner` subagent via the Task tool for EACH paper with an arxivId" +
+      (input.minable.length > 0 ? ` (${input.minable.join(", ")})` : "") +
+      ", ALL in ONE turn so they run in parallel; pass each: the arXiv id, title, the user's language, a 2-3 line profile summary, and the card's relationToMyWork + known limitations. Papers without an arxivId (or if Task is unavailable) proceed on card material alone.",
+    "(2) SYNTHESIZE — generate 3-5 research ideas in the user's language. EVERY idea must cite the specific paper(s) and the specific material it builds on (a mined assumption/limitation/future-work hint, or a card's method/reusableIdea/nextAction, or a profile question); NEVER invent paper content beyond jsonData + mined material. Patterns: (a) a limitation or fragile assumption as the opportunity, (b) method transfer onto another paper's problem or the profile focus, (c) a profile open question × a technique from the papers, (d) combining papers that share a theme (see sharedThemes), (e) a future-work hint × the user's strengths. Each idea: short title / what it is / why it is new vs the cited papers / a concrete first experiment.",
+    "(3) ASK which ideas to keep; ONLY on explicit selection call saveIdea per chosen idea (kebab-case slug, title, description, motivation = the why-new, firstExperiment, sourcePapers = the cited card slugs, themes). NEVER auto-save.",
+  ];
+  return parts.filter(Boolean).join(" ");
 }
 
 function renderExport(cards: PaperCard[], format: "bibtex" | "references" | "markdown"): string {
@@ -257,6 +301,112 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
     return parseProfile(await files.data.read(PROFILE_FILE)) ?? EMPTY_PROFILE;
   }
 
+  // ── Idea storage (mirrors readCard/listCards/writeCard) ────────────
+
+  async function readIdea(slug: string): Promise<Idea | null> {
+    if (!isValidSlug(slug) || !(await files.data.exists(ideaPath(slug)))) return null;
+    return parseIdea(await files.data.read(ideaPath(slug)));
+  }
+
+  async function listIdeasFromDisk(): Promise<Idea[]> {
+    if (!(await files.data.exists(IDEAS_DIR))) return [];
+    const entries = await files.data.readDir(IDEAS_DIR);
+    const out: Idea[] = [];
+    for (const entry of entries) {
+      if (!entry.endsWith(".json")) continue;
+      const idea = parseIdea(await files.data.read(`${IDEAS_DIR}/${entry}`));
+      if (idea) out.push(idea);
+    }
+    return out;
+  }
+
+  async function writeIdea(idea: Idea): Promise<void> {
+    await files.data.write(ideaPath(idea.slug), serializeIdea(idea));
+    pubsub.publish(CHANGED, { idea: idea.slug });
+  }
+
+  /** Resolve the ideation selection: union of explicit slugs (in request
+   *  order) and a theme filter, deduped; `missing` = slugs not found. */
+  async function resolveIdeationCards(slugs: string[], theme: string | undefined): Promise<{ cards: PaperCard[]; missing: string[] }> {
+    const all = await listCards();
+    const bySlug = new Map(all.map((card) => [card.slug, card]));
+    const picked = new Map<string, PaperCard>();
+    const missing: string[] = [];
+    for (const slug of slugs) {
+      const card = bySlug.get(slug);
+      if (card) picked.set(slug, card);
+      else missing.push(slug);
+    }
+    if (theme) {
+      for (const card of all) {
+        if (card.themes.includes(theme) && !picked.has(card.slug)) picked.set(card.slug, card);
+      }
+    }
+    return { cards: [...picked.values()], missing };
+  }
+
+  /** sourcePapers referencing cards that don't exist — soft warning, not an error. */
+  async function unknownSourcePapers(sourcePapers: string[] | undefined): Promise<string[]> {
+    if (!sourcePapers || sourcePapers.length === 0) return [];
+    const all = await listCards();
+    const known = new Set(all.map((card) => card.slug));
+    return sourcePapers.filter((slug) => !known.has(slug));
+  }
+
+  async function handleSaveIdea(args: SaveIdeaArgs): Promise<unknown> {
+    if (!isValidSlug(args.slug)) return { error: "invalid slug — use kebab-case (a-z, 0-9, hyphens)", status: 400 };
+    return withWriteLock(async () => {
+      const existing = await readIdea(args.slug);
+      if (existing && !args.force) {
+        return {
+          error: "idea slug exists",
+          status: 409,
+          message: `Idea "${args.slug}" already exists — ask the user: overwrite (saveIdea force:true), patch it (updateIdea), or pick another slug.`,
+        };
+      }
+      const now = nowIso();
+      // IdeaSchema strips extra keys (kind, force) and applies defaults.
+      const idea = IdeaSchema.parse({ ...args, created: existing?.created ?? now, updated: now });
+      await writeIdea(idea);
+      log.info("idea saved", { slug: idea.slug });
+      const unknown = await unknownSourcePapers(args.sourcePapers);
+      const envelope: Record<string, unknown> = { message: `Saved idea "${idea.title}" (${idea.slug}), grounded in ${idea.sourcePapers.length} paper(s).`, jsonData: idea };
+      if (unknown.length > 0) envelope.warning = [`unknown sourcePapers (no card with these slugs): ${unknown.join(", ")}`];
+      return envelope;
+    });
+  }
+
+  async function handleUpdateIdea(args: UpdateIdeaArgs): Promise<unknown> {
+    return withWriteLock(async () => {
+      const existing = await readIdea(args.slug);
+      if (!existing) return { error: `idea not found: ${args.slug}`, status: 404 };
+      const patch: IdeaPatch = {
+        title: args.title,
+        description: args.description,
+        motivation: args.motivation,
+        firstExperiment: args.firstExperiment,
+        sourcePapers: args.sourcePapers,
+        themes: args.themes,
+        status: args.status,
+      };
+      const idea = mergeIdea(existing, patch, nowIso());
+      await writeIdea(idea);
+      const unknown = await unknownSourcePapers(args.sourcePapers);
+      const envelope: Record<string, unknown> = { message: `Updated idea "${idea.title}" (${idea.slug}, status: ${idea.status}).`, jsonData: idea };
+      if (unknown.length > 0) envelope.warning = [`unknown sourcePapers (no card with these slugs): ${unknown.join(", ")}`];
+      return envelope;
+    });
+  }
+
+  async function handleDeleteIdea(slug: string): Promise<unknown> {
+    return withWriteLock(async () => {
+      if (!(await readIdea(slug))) return { error: `idea not found: ${slug}`, status: 404 };
+      await files.data.unlink(ideaPath(slug));
+      pubsub.publish(CHANGED, { idea: slug });
+      return { message: `Deleted idea ${slug}.` };
+    });
+  }
+
   async function handleSetProfile(patch: ProfilePatch): Promise<unknown> {
     return withWriteLock(async () => {
       const profile = mergeProfile(await readProfile(), patch, nowIso());
@@ -373,6 +523,46 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
             if (err instanceof MetadataError) return { error: err.message, status: err.code === "not-found" ? 404 : 502 };
             return { error: String(err), status: 500 };
           }
+        }
+        case "ideate": {
+          const slugs = args.slugs ?? [];
+          if (slugs.length === 0 && !args.theme) return { error: "ideate requires slugs or theme", status: 400 };
+          const { cards, missing } = await resolveIdeationCards(slugs, args.theme);
+          if (cards.length === 0) {
+            const detail = missing.length > 0 ? `no cards found for slugs: ${missing.join(", ")}` : `no cards in theme "${args.theme}"`;
+            return { error: detail, status: 404 };
+          }
+          const material = gatherIdeationMaterial(cards, await readProfile());
+          log.info("ideation material", { papers: cards.length, missing: missing.length });
+          // No `data` field — the canvas stays untouched; ideas live in chat.
+          return {
+            message: ideationMessage({
+              paperCount: cards.length,
+              minable: material.papers.filter((p) => p.arxivId).map((p) => p.slug),
+              missing,
+              profileEmpty: material.profile === null,
+              thinCards: material.thinCards,
+            }),
+            jsonData: { ...material, missingSlugs: missing },
+          };
+        }
+        case "saveIdea":
+          return handleSaveIdea(args);
+        case "updateIdea":
+          return handleUpdateIdea(args);
+        case "deleteIdea":
+          return handleDeleteIdea(args.slug);
+        case "listIdeas": {
+          const all = await listIdeasFromDisk();
+          const filtered = all
+            .filter((idea) => (args.theme ? idea.themes.includes(args.theme) : true))
+            .filter((idea) => (args.status ? idea.status === args.status : true))
+            .sort((a, b) => b.updated.localeCompare(a.updated));
+          const filterNote = [args.theme && `theme "${args.theme}"`, args.status && `status ${args.status}`].filter(Boolean).join(", ");
+          return {
+            message: `${filtered.length} idea(s)${filterNote ? ` matching ${filterNote}` : ""}. Present them as a numbered list in chat — title, status, themes, source papers, description. Ideas have NO canvas view.`,
+            jsonData: filtered,
+          };
         }
         default: {
           const exhaustive: never = args;

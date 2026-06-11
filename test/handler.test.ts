@@ -225,6 +225,126 @@ test("mergePapers returns not-found when the target slug doesn't exist", async (
   assert.equal(res.status, 404);
 });
 
+// ── Ideation (ideate / saveIdea / listIdeas / updateIdea / deleteIdea) ──
+
+async function seedCards(plugin: any): Promise<void> {
+  await plugin.manageLiterature({ kind: "save", slug: "mem-a", title: "Long-term memory", arxivId: "2401.00001", themes: ["Agentic Memory"], limitations: ["flat entries"], relationToMyWork: "baseline" });
+  await plugin.manageLiterature({ kind: "save", slug: "idx-b", title: "Dynamic index", themes: ["Compressed Indexing", "Agentic Memory"], reusableIdeas: ["succinct sampling"] });
+}
+
+test("ideate by slugs returns material + missingSlugs, no canvas data", async () => {
+  const { plugin } = makeRuntime();
+  await seedCards(plugin);
+  await plugin.manageLiterature({ kind: "setProfile", focus: "compressed agent memory" });
+
+  const res = (await plugin.manageLiterature({ kind: "ideate", slugs: ["mem-a", "ghost"] })) as any;
+  assert.equal(res.data, undefined, "ideate returns no canvas data (LLM-only payload)");
+  assert.deepEqual(res.jsonData.papers.map((p: any) => p.slug), ["mem-a"]);
+  assert.deepEqual(res.jsonData.missingSlugs, ["ghost"]);
+  assert.equal(res.jsonData.profile.focus, "compressed agent memory");
+  assert.match(res.message, /ghost/, "missing slug surfaced in the message");
+  assert.match(res.message, /idea-miner/, "mining procedure included");
+  assert.match(res.message, /mem-a/, "arxivId-bearing paper listed as minable");
+});
+
+test("ideate unions slugs and theme, deduped; thinCards and empty profile noted", async () => {
+  const { plugin } = makeRuntime();
+  await seedCards(plugin);
+
+  // mem-a matches both the explicit slug and the theme — must appear once.
+  const res = (await plugin.manageLiterature({ kind: "ideate", slugs: ["mem-a"], theme: "Agentic Memory" })) as any;
+  assert.deepEqual(res.jsonData.papers.map((p: any) => p.slug), ["mem-a", "idx-b"]);
+  assert.equal(res.jsonData.profile, null);
+  assert.match(res.message, /profile is EMPTY/i);
+  assert.deepEqual(res.jsonData.sharedThemes, ["Agentic Memory"]);
+});
+
+test("ideate requires slugs or theme (400) and 404s when nothing resolves", async () => {
+  const { plugin } = makeRuntime();
+  const bad = (await plugin.manageLiterature({ kind: "ideate" })) as any;
+  assert.equal(bad.status, 400);
+  const none = (await plugin.manageLiterature({ kind: "ideate", slugs: ["ghost"] })) as any;
+  assert.equal(none.status, 404);
+  assert.match(none.error, /ghost/);
+});
+
+test("saveIdea persists with defaults; listIdeas round-trips; invalid slug 400", async () => {
+  const { plugin, store } = makeRuntime();
+  await seedCards(plugin);
+
+  const saved = (await plugin.manageLiterature({
+    kind: "saveIdea",
+    slug: "compressed-decisions",
+    title: "Compressed decision log",
+    description: "Index decisions with a self-index.",
+    sourcePapers: ["mem-a", "idx-b"],
+    themes: ["Agentic Memory"],
+  })) as any;
+  assert.equal(saved.data, undefined, "ideas have no canvas view");
+  assert.equal(saved.jsonData.status, "raw", "status defaults to raw");
+  assert.equal(saved.warning, undefined, "known sourcePapers produce no warning");
+  assert.ok(store.has("ideas/compressed-decisions.json"));
+
+  const list = (await plugin.manageLiterature({ kind: "listIdeas" })) as any;
+  assert.equal(list.jsonData.length, 1);
+  assert.equal(list.jsonData[0].slug, "compressed-decisions");
+
+  const bad = (await plugin.manageLiterature({ kind: "saveIdea", slug: "Bad Slug", title: "x", description: "d" })) as any;
+  assert.equal(bad.status, 400);
+});
+
+test("saveIdea warns on unknown sourcePapers but still saves", async () => {
+  const { plugin, store } = makeRuntime();
+  const res = (await plugin.manageLiterature({
+    kind: "saveIdea",
+    slug: "orphan-idea",
+    title: "t",
+    description: "d",
+    sourcePapers: ["nonexistent-card"],
+  })) as any;
+  assert.ok(store.has("ideas/orphan-idea.json"), "saved despite unknown source");
+  assert.ok(Array.isArray(res.warning));
+  assert.match(res.warning[0], /nonexistent-card/);
+});
+
+test("saveIdea collision → 409 without overwrite; force=true overwrites and preserves created", async () => {
+  const { plugin, store } = makeRuntime();
+  await plugin.manageLiterature({ kind: "saveIdea", slug: "i1", title: "v1", description: "first" });
+  const created = JSON.parse(store.get("ideas/i1.json")!).created;
+
+  const blocked = (await plugin.manageLiterature({ kind: "saveIdea", slug: "i1", title: "v2", description: "second" })) as any;
+  assert.equal(blocked.status, 409);
+  assert.equal(JSON.parse(store.get("ideas/i1.json")!).title, "v1", "blocked save must not overwrite");
+
+  const forced = (await plugin.manageLiterature({ kind: "saveIdea", slug: "i1", title: "v2", description: "second", force: true })) as any;
+  assert.equal(forced.jsonData.title, "v2");
+  assert.equal(forced.jsonData.created, created, "force overwrite preserves created");
+});
+
+test("listIdeas filters by theme and status; updateIdea patches partially; deleteIdea removes", async () => {
+  const { plugin, store } = makeRuntime();
+  await plugin.manageLiterature({ kind: "saveIdea", slug: "i1", title: "a", description: "da", themes: ["Memory"] });
+  await plugin.manageLiterature({ kind: "saveIdea", slug: "i2", title: "b", description: "db", themes: ["Index"], status: "exploring" });
+
+  const byTheme = (await plugin.manageLiterature({ kind: "listIdeas", theme: "Memory" })) as any;
+  assert.deepEqual(byTheme.jsonData.map((i: any) => i.slug), ["i1"]);
+  const byStatus = (await plugin.manageLiterature({ kind: "listIdeas", status: "exploring" })) as any;
+  assert.deepEqual(byStatus.jsonData.map((i: any) => i.slug), ["i2"]);
+
+  // status-only patch preserves description (partial merge)
+  const upd = (await plugin.manageLiterature({ kind: "updateIdea", slug: "i1", status: "adopted" })) as any;
+  assert.equal(upd.jsonData.status, "adopted");
+  assert.equal(upd.jsonData.description, "da");
+
+  const missing = (await plugin.manageLiterature({ kind: "updateIdea", slug: "ghost", status: "dropped" })) as any;
+  assert.equal(missing.status, 404);
+  const delMissing = (await plugin.manageLiterature({ kind: "deleteIdea", slug: "ghost" })) as any;
+  assert.equal(delMissing.status, 404);
+
+  await plugin.manageLiterature({ kind: "deleteIdea", slug: "i1" });
+  assert.equal(store.has("ideas/i1.json"), false);
+});
+
 test("setProfile then getProfile round-trips the research profile (partial merge preserves themes)", async () => {
   const { plugin } = makeRuntime();
 

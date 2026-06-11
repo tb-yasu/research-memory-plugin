@@ -15,6 +15,9 @@ Every paper is stored as a **Paper Card**: the paper's own content (summary, cla
 ## What you can do
 
 - **Capture from chat** — paste an abstract or just say `arXiv:2401.12345` / `DOI:10.xxxx/yyyy`; the plugin auto-fills the metadata (title, authors, year, venue, abstract, URL) from arXiv or Crossref, and the LLM adds the relational spine relative to your research focus.
+- **Find papers by theme** — `2024年以降の Agentic Memory の論文を探して` searches Semantic Scholar (year range, up to 100 hits), marks candidates already in your store, and registers only the ones you pick.
+- **Full-paper reading on registration** — picked candidates with an arXiv id get their body fetched (arxiv.org/html, ar5iv fallback; references stripped, middle elided) so the card is a full Ochiai extraction, not an abstract dump. With the optional `paper-reader` subagent (`examples/agents/`), each paper is read in a disposable context — in parallel, without bloating the chat.
+- **Next-research ideas from selected papers** — `さっき登録した3本から次の研究アイデアを出して`: the plugin gathers ideation material (limitations, methods, reusable ideas, your relation notes + research profile), the optional `idea-miner` subagent re-reads each paper's body for fuel the cards don't record (fragile assumptions, future-work hints), and the LLM synthesizes 3-5 grounded ideas. Keep the good ones as Idea records (`ideas/<slug>.json`, linked to their source papers, with a raw → exploring → adopted/dropped lifecycle).
 - **Search & filter** — full-text search, theme filter, and *year-from* filter over your whole corpus (deterministic, in the plugin).
 - **Citation table** — for a theme, get a table of *which paper to cite, for what, in which section* — straight into your Related Work.
 - **Related Work outline** — one step past the citation table: ask `Generate a Related Work outline for theme: Agentic Memory` and the reply IS the outline markdown — paper groups (by co-occurring themes), each group's discussion points (your own *Relation to my work* notes), each paper's 要点 (novelty/summary) and citation purposes. Extraction, grouping, and ordering are deterministic in the plugin; the LLM may only smooth the bullets into prose — grounded in the card content, never reordering or inventing papers. Papers missing a citation purpose are flagged so you can fill the gap before writing. Each call also persists the markdown to `related-work/<theme-slug>.md` in the plugin's data dir (one file per theme, overwritten) — files are the source of truth, so later "save it / draft on it" requests just read the file.
@@ -40,11 +43,24 @@ So the "intelligence" is the LLM; the plugin is a dependable, testable store wit
 | `src/relatedwork.ts` | `buildRelatedWorkOutline` (co-theme grouping, chronological order, discussion points, purpose ranking, gap detection) + `relatedWorkToMarkdown` |
 | `src/profile.ts` | `ResearchProfile` read / write (focus / themes / open questions) |
 | `src/metadata.ts` | arXiv Atom + Crossref/DOI parsers; returns a `MetadataPatch` the LLM passes to `save` |
+| `src/papersearch.ts` | Semantic Scholar relevance search (year range, limit clamp, gist truncation) + dedup annotation against the store |
+| `src/fulltext.ts` | arXiv HTML / ar5iv full-text fetcher (markup stripped, references cut, middle elided) for full-Ochiai extraction |
+| `src/idea.ts` | `Idea` schema (description / motivation / firstExperiment / sourcePapers / status lifecycle), JSON (de)serialize, partial-merge |
+| `src/ideate.ts` | `gatherIdeationMaterial` — per-card ideation fuel + profile + shared themes + thin-card detection (deterministic; the LLM does the ideation) |
 | `src/excel.ts` | XLSX workbook for the Excel export |
-| `src/index.ts` | `definePlugin` factory: CRUD + list/search + citationTable + relatedWork + export + profile + fetchMetadata + conflict-aware save/mergePapers |
+| `src/index.ts` | `definePlugin` factory: CRUD + list/search + citationTable + relatedWork + export + profile + fetchMetadata/searchPapers/fetchFullText + ideate + idea CRUD + conflict-aware save/mergePapers |
 | `src/View.vue` | browse (list + detail + theme/year filter + search), citation-table mode, Related Work outline mode, export, add/edit form, profile editor, conflict resolver |
 
-The MCP tool is `manageLiterature` (kinds: `list`, `read`, `save`, `update`, `delete`, `citationTable`, `relatedWork`, `export`, `getProfile`, `setProfile`, `fetchMetadata`, `mergePapers`).
+The MCP tool is `manageLiterature` (kinds: `list`, `read`, `save`, `update`, `delete`, `citationTable`, `relatedWork`, `export`, `getProfile`, `setProfile`, `fetchMetadata`, `mergePapers`, `searchPapers`, `fetchFullText`, `ideate`, `saveIdea`, `listIdeas`, `updateIdea`, `deleteIdea`).
+
+### Optional subagents (parallel reading without context bloat)
+
+Two Claude Code subagent definitions live in [`examples/agents/`](examples/agents/): `paper-reader` (register one paper: fetch body → full Ochiai card) and `idea-miner` (mine one paper's body for idea fuel). To enable them in MulmoClaude:
+
+1. Copy them to `~/mulmoclaude/.claude/agents/`.
+2. Allow the Task tool: `~/mulmoclaude/config/settings.json` → `{ "extraAllowedTools": ["Task"] }`.
+
+Without them everything still works — the agent falls back to inline `fetchFullText` / card-only ideation.
 
 ## Develop against MulmoClaude
 
