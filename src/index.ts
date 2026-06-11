@@ -129,15 +129,20 @@ function patchFromArgs(a: UpdateArgs): CardPatch {
   };
 }
 
-/** The LLM-facing procedure for `ideate` — mining via subagents, then
- *  grounded synthesis. Pure so tests can assert the conditional notes. */
-export function ideationMessage(input: { paperCount: number; minable: string[]; missing: string[]; profileEmpty: boolean; thinCards: string[] }): string {
+/** The LLM-facing procedure for `ideate` — confirm (theme selections),
+ *  mining via subagents, then grounded synthesis. Pure so tests can
+ *  assert the conditional notes. */
+export function ideationMessage(input: { paperCount: number; minable: string[]; missing: string[]; profileEmpty: boolean; thinCards: string[]; themeUsed: boolean }): string {
   const parts = [
     `Ideation material for ${input.paperCount} paper(s) + the research profile is in jsonData.`,
     input.missing.length > 0 ? `${input.missing.length} requested slug(s) not found: ${input.missing.join(", ")} — tell the user.` : "",
     input.profileEmpty ? "The research profile is EMPTY — ideas can only be grounded in the papers; offer setProfile." : "",
     input.thinCards.length > 0 ? `Thin cards (no limitations/reusableIdeas/nextActions recorded): ${input.thinCards.join(", ")} — their material is limited.` : "",
-    "PROCEDURE: (1) MINE — unless the user asked for a cards-only quick pass, spawn the `idea-miner` subagent via the Task tool for EACH paper with an arxivId" +
+    "PROCEDURE:",
+    input.themeUsed
+      ? "(0) CONFIRM — this selection came from a THEME filter; theme tags are coarse, so it may include papers irrelevant to the user's current direction. Present the resolved papers as a numbered list (title + slug) and ask which to keep BEFORE any mining (「全部」 keeps all). Papers the user drops are excluded from mining AND synthesis. Skip this step only if the user already said to use the whole theme."
+      : "",
+    "(1) MINE — unless the user asked for a cards-only quick pass, spawn the `idea-miner` subagent via the Task tool for EACH paper with an arxivId" +
       (input.minable.length > 0 ? ` (${input.minable.join(", ")})` : "") +
       ", ALL in ONE turn so they run in parallel; pass each: the arXiv id, title, the user's language, a 2-3 line profile summary, and the card's relationToMyWork + known limitations. Papers without an arxivId (or if Task is unavailable) proceed on card material alone.",
     "(2) SYNTHESIZE — generate 3-5 research ideas in the user's language. EVERY idea must cite the specific paper(s) and the specific material it builds on (a mined assumption/limitation/future-work hint, or a card's method/reusableIdea/nextAction, or a profile question); NEVER invent paper content beyond jsonData + mined material. Patterns: (a) a limitation or fragile assumption as the opportunity, (b) method transfer onto another paper's problem or the profile focus, (c) a profile open question × a technique from the papers, (d) combining papers that share a theme (see sharedThemes), (e) a future-work hint × the user's strengths. Each idea: short title / what it is / why it is new vs the cited papers / a concrete first experiment.",
@@ -542,6 +547,7 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
               missing,
               profileEmpty: material.profile === null,
               thinCards: material.thinCards,
+              themeUsed: Boolean(args.theme),
             }),
             jsonData: { ...material, missingSlugs: missing },
           };

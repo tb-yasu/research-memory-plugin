@@ -245,6 +245,7 @@ test("ideate by slugs returns material + missingSlugs, no canvas data", async ()
   assert.match(res.message, /ghost/, "missing slug surfaced in the message");
   assert.match(res.message, /idea-miner/, "mining procedure included");
   assert.match(res.message, /mem-a/, "arxivId-bearing paper listed as minable");
+  assert.doesNotMatch(res.message, /CONFIRM/, "explicit-slug selection needs no confirmation step");
 });
 
 test("ideate unions slugs and theme, deduped; thinCards and empty profile noted", async () => {
@@ -257,6 +258,7 @@ test("ideate unions slugs and theme, deduped; thinCards and empty profile noted"
   assert.equal(res.jsonData.profile, null);
   assert.match(res.message, /profile is EMPTY/i);
   assert.deepEqual(res.jsonData.sharedThemes, ["Agentic Memory"]);
+  assert.match(res.message, /\(0\) CONFIRM/, "theme selection requires the confirmation step before mining");
 });
 
 test("ideate requires slugs or theme (400) and 404s when nothing resolves", async () => {
