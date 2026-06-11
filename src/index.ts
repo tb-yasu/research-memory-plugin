@@ -21,12 +21,14 @@ import { annotateCandidates, searchSemanticScholar } from "./papersearch";
 import { fetchArxivFullText } from "./fulltext";
 import { IdeaSchema, IdeaStatusSchema, mergeIdea, parseIdea, serializeIdea, type Idea, type IdeaPatch } from "./idea";
 import { gatherIdeationMaterial } from "./ideate";
+import { EMPTY_SELECTION, parseSelection, serializeSelection, type IdeationSelection } from "./selection";
 
 export { TOOL_DEFINITION };
 
 const PAPERS_DIR = "papers";
 const IDEAS_DIR = "ideas";
 const PROFILE_FILE = "profile.json";
+const SELECTION_FILE = "ideation-selection.json";
 const CHANGED = "changed";
 
 // Optional card fields shared by `save` and `update`. `save` overrides
@@ -88,6 +90,8 @@ const Args = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("updateIdea"), ...ideaFields, slug: z.string() }),
   z.object({ kind: z.literal("deleteIdea"), slug: z.string() }),
   z.object({ kind: z.literal("listIdeas"), theme: z.string().optional(), status: IdeaStatusSchema.optional() }),
+  z.object({ kind: z.literal("setSelection"), slugs: z.array(z.string()) }),
+  z.object({ kind: z.literal("getSelection") }),
 ]);
 
 type SaveArgs = Extract<z.infer<typeof Args>, { kind: "save" }>;
@@ -132,9 +136,10 @@ function patchFromArgs(a: UpdateArgs): CardPatch {
 /** The LLM-facing procedure for `ideate` — confirm (theme selections),
  *  mining via subagents, then grounded synthesis. Pure so tests can
  *  assert the conditional notes. */
-export function ideationMessage(input: { paperCount: number; minable: string[]; missing: string[]; profileEmpty: boolean; thinCards: string[]; themeUsed: boolean }): string {
+export function ideationMessage(input: { paperCount: number; minable: string[]; missing: string[]; profileEmpty: boolean; thinCards: string[]; themeUsed: boolean; fromSelection: boolean }): string {
   const parts = [
     `Ideation material for ${input.paperCount} paper(s) + the research profile is in jsonData.`,
+    input.fromSelection ? "The papers come from the user's checkbox selection in the panel — an explicit choice; no confirmation needed. Tell the user which papers the selection contained." : "",
     input.missing.length > 0 ? `${input.missing.length} requested slug(s) not found: ${input.missing.join(", ")} — tell the user.` : "",
     input.profileEmpty ? "The research profile is EMPTY — ideas can only be grounded in the papers; offer setProfile." : "",
     input.thinCards.length > 0 ? `Thin cards (no limitations/reusableIdeas/nextActions recorded): ${input.thinCards.join(", ")} — their material is limited.` : "",
@@ -328,6 +333,20 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
   async function writeIdea(idea: Idea): Promise<void> {
     await files.data.write(ideaPath(idea.slug), serializeIdea(idea));
     pubsub.publish(CHANGED, { idea: idea.slug });
+  }
+
+  async function readSelection(): Promise<IdeationSelection> {
+    if (!(await files.data.exists(SELECTION_FILE))) return EMPTY_SELECTION;
+    return parseSelection(await files.data.read(SELECTION_FILE)) ?? EMPTY_SELECTION;
+  }
+
+  async function handleSetSelection(slugs: string[]): Promise<unknown> {
+    return withWriteLock(async () => {
+      const selection: IdeationSelection = { slugs, updated: nowIso() };
+      await files.data.write(SELECTION_FILE, serializeSelection(selection));
+      pubsub.publish(CHANGED, { selection: true });
+      return { message: `Ideation selection updated (${slugs.length} paper(s)).`, jsonData: selection };
+    });
   }
 
   /** Resolve the ideation selection: union of explicit slugs (in request
@@ -530,8 +549,16 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
           }
         }
         case "ideate": {
-          const slugs = args.slugs ?? [];
-          if (slugs.length === 0 && !args.theme) return { error: "ideate requires slugs or theme", status: 400 };
+          let slugs = args.slugs ?? [];
+          // No explicit selection in the call → fall back to the panel's
+          // checkbox selection (persisted by the View via setSelection).
+          let fromSelection = false;
+          if (slugs.length === 0 && !args.theme) {
+            const selection = await readSelection();
+            if (selection.slugs.length === 0) return { error: "ideate requires slugs, a theme, or papers checked in the panel (checkboxes)", status: 400 };
+            slugs = selection.slugs;
+            fromSelection = true;
+          }
           const { cards, missing } = await resolveIdeationCards(slugs, args.theme);
           if (cards.length === 0) {
             const detail = missing.length > 0 ? `no cards found for slugs: ${missing.join(", ")}` : `no cards in theme "${args.theme}"`;
@@ -548,8 +575,9 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
               profileEmpty: material.profile === null,
               thinCards: material.thinCards,
               themeUsed: Boolean(args.theme),
+              fromSelection,
             }),
-            jsonData: { ...material, missingSlugs: missing },
+            jsonData: { ...material, missingSlugs: missing, fromSelection },
           };
         }
         case "saveIdea":
@@ -569,6 +597,12 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
             message: `${filtered.length} idea(s)${filterNote ? ` matching ${filterNote}` : ""}. Present them as a numbered list in chat — title, status, themes, source papers, description. Ideas have NO canvas view.`,
             jsonData: filtered,
           };
+        }
+        case "setSelection":
+          return handleSetSelection(args.slugs);
+        case "getSelection": {
+          const selection = await readSelection();
+          return { message: `Ideation selection: ${selection.slugs.length} paper(s).`, jsonData: selection };
         }
         default: {
           const exhaustive: never = args;

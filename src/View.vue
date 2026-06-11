@@ -165,6 +165,11 @@ const sortBy = ref<"recency" | "title">("recency");
 const collapsed = reactive(new Set<string>());
 const NO_THEME = "__no_theme__";
 
+// Checkbox selection for ideation. The View cannot start the LLM (no
+// chat-injection API), so checks persist server-side via setSelection
+// and the user triggers generation with a chat phrase (see t.ideateHint).
+const checkedSlugs = reactive(new Set<string>());
+
 const citationRows = ref<CitationRow[]>(sd?.view === "citationTable" ? sd.rows : []);
 const citationTheme = ref(sd?.view === "citationTable" ? sd.theme : "");
 const outline = ref<RelatedWorkOutline | null>(sd?.view === "relatedWork" ? sd.outline : null);
@@ -244,6 +249,36 @@ const groupedCards = computed<ThemeGroup[]>(() => {
 function toggleCollapse(theme: string): void {
   if (collapsed.has(theme)) collapsed.delete(theme);
   else collapsed.add(theme);
+}
+
+// ── ideation selection ──────────────────────────────────────────────────
+async function loadSelection(): Promise<void> {
+  try {
+    const res = await dispatch<{ jsonData?: { slugs?: string[] } }>({ kind: "getSelection" });
+    checkedSlugs.clear();
+    for (const slug of res.jsonData?.slugs ?? []) checkedSlugs.add(slug);
+  } catch (err) {
+    log.warn("loadSelection failed", { error: String(err) });
+  }
+}
+
+async function persistSelection(): Promise<void> {
+  try {
+    await dispatch({ kind: "setSelection", slugs: [...checkedSlugs] });
+  } catch (err) {
+    log.warn("persistSelection failed", { error: String(err) });
+  }
+}
+
+function toggleCheck(slug: string): void {
+  if (checkedSlugs.has(slug)) checkedSlugs.delete(slug);
+  else checkedSlugs.add(slug);
+  void persistSelection();
+}
+
+function clearChecks(): void {
+  checkedSlugs.clear();
+  void persistSelection();
 }
 
 // ── data ───────────────────────────────────────────────────────────────
@@ -548,6 +583,7 @@ let unsubscribe: (() => void) | null = null;
 onMounted(() => {
   void refetch();
   void loadProfile();
+  void loadSelection();
   unsubscribe = pubsub.subscribe("changed", () => {
     void refetch();
     void loadProfile();
@@ -715,6 +751,12 @@ onUnmounted(() => unsubscribe?.());
         <button class="link-btn" @click="openProfile">{{ t.btnEdit }}</button>
       </div>
 
+      <div v-if="checkedSlugs.size > 0" class="selection-bar">
+        <span class="sel-count">{{ checkedSlugs.size }} {{ t.selectedForIdeas }}</span>
+        <span class="sel-hint">{{ t.ideateHint }}</span>
+        <button class="link-btn" @click="clearChecks">{{ t.btnClearSelection }}</button>
+      </div>
+
       <div class="body">
         <div class="list">
           <p v-if="groupedCards.length === 0" class="empty">{{ t.empty }}</p>
@@ -725,7 +767,8 @@ onUnmounted(() => unsubscribe?.());
               <span class="group-count">{{ g.cards.length }}</span>
             </button>
             <ul v-show="!collapsed.has(g.theme)" class="group-list">
-              <li v-for="c in g.cards" :key="`${g.theme}/${c.slug}`">
+              <li v-for="c in g.cards" :key="`${g.theme}/${c.slug}`" class="list-li">
+                <input type="checkbox" class="check" :checked="checkedSlugs.has(c.slug)" :title="t.checkForIdeas" @change="toggleCheck(c.slug)" />
                 <button class="list-row" :class="{ active: selectedSlug === c.slug }" @click="selectedSlug = c.slug">
                   <span class="list-title">{{ c.title }}</span>
                   <span class="list-by">{{ byline(c) }}</span>
@@ -961,6 +1004,42 @@ onUnmounted(() => unsubscribe?.());
   font: inherit;
   font-size: 0.78rem;
   margin-left: 0.4rem;
+}
+.selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 1rem;
+  background: #fefce8;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 0.82rem;
+  color: #374151;
+}
+.sel-count {
+  font-weight: 600;
+  color: #a16207;
+  white-space: nowrap;
+}
+.sel-hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.list-li {
+  display: flex;
+  align-items: flex-start;
+}
+.check {
+  flex: 0 0 auto;
+  margin: 0.7rem 0 0 0.5rem;
+  cursor: pointer;
+  accent-color: #2563eb;
+}
+.list-li .list-row {
+  flex: 1;
+  min-width: 0;
 }
 .body {
   flex: 1;

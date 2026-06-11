@@ -94,6 +94,12 @@ export default {
   sortTitle: "Title",
   noTheme: "(no theme)",
 
+  // Ideation checkbox selection
+  checkForIdeas: "Select for idea generation",
+  selectedForIdeas: "selected for idea generation",
+  ideateHint: "In chat, say “Propose ideas from the selected papers” to generate.",
+  btnClearSelection: "Clear",
+
   // Duplicate detection / conflict resolution
   secConflict: "Possible duplicate",
   conflictHint: "This paper may already be in your library. Pick one of the options below.",

@@ -261,13 +261,47 @@ test("ideate unions slugs and theme, deduped; thinCards and empty profile noted"
   assert.match(res.message, /\(0\) CONFIRM/, "theme selection requires the confirmation step before mining");
 });
 
-test("ideate requires slugs or theme (400) and 404s when nothing resolves", async () => {
+test("ideate requires slugs, theme, or a panel selection (400) and 404s when nothing resolves", async () => {
   const { plugin } = makeRuntime();
   const bad = (await plugin.manageLiterature({ kind: "ideate" })) as any;
   assert.equal(bad.status, 400);
+  assert.match(bad.error, /checked in the panel/);
   const none = (await plugin.manageLiterature({ kind: "ideate", slugs: ["ghost"] })) as any;
   assert.equal(none.status, 404);
   assert.match(none.error, /ghost/);
+});
+
+test("setSelection/getSelection round-trip; ideate falls back to the panel selection without a confirm step", async () => {
+  const { plugin, store } = makeRuntime();
+  await seedCards(plugin);
+
+  const set = (await plugin.manageLiterature({ kind: "setSelection", slugs: ["mem-a", "idx-b"] })) as any;
+  assert.equal(set.data, undefined, "selection kinds touch no canvas");
+  assert.ok(store.has("ideation-selection.json"));
+
+  const got = (await plugin.manageLiterature({ kind: "getSelection" })) as any;
+  assert.deepEqual(got.jsonData.slugs, ["mem-a", "idx-b"]);
+
+  // ideate with neither slugs nor theme → uses the stored selection.
+  const res = (await plugin.manageLiterature({ kind: "ideate" })) as any;
+  assert.deepEqual(res.jsonData.papers.map((p: any) => p.slug), ["mem-a", "idx-b"]);
+  assert.equal(res.jsonData.fromSelection, true);
+  assert.match(res.message, /checkbox selection/, "panel-selection provenance surfaced to the LLM");
+  assert.doesNotMatch(res.message, /CONFIRM/, "checkbox selection is explicit — no confirmation step");
+
+  // Clearing via setSelection([]) makes argless ideate a 400 again.
+  await plugin.manageLiterature({ kind: "setSelection", slugs: [] });
+  const cleared = (await plugin.manageLiterature({ kind: "ideate" })) as any;
+  assert.equal(cleared.status, 400);
+});
+
+test("ideate with a stale panel selection reports the missing slug but proceeds", async () => {
+  const { plugin } = makeRuntime();
+  await seedCards(plugin);
+  await plugin.manageLiterature({ kind: "setSelection", slugs: ["mem-a", "deleted-card"] });
+  const res = (await plugin.manageLiterature({ kind: "ideate" })) as any;
+  assert.deepEqual(res.jsonData.papers.map((p: any) => p.slug), ["mem-a"]);
+  assert.deepEqual(res.jsonData.missingSlugs, ["deleted-card"]);
 });
 
 test("saveIdea persists with defaults; listIdeas round-trips; invalid slug 400", async () => {

@@ -94,6 +94,12 @@ export default {
   sortTitle: "タイトル順",
   noTheme: "（テーマなし）",
 
+  // アイデア生成のチェックボックス選択
+  checkForIdeas: "アイデア生成に選択",
+  selectedForIdeas: "件をアイデア生成に選択中",
+  ideateHint: "チャットで「選択した論文からアイデアを出して」と言うと生成します。",
+  btnClearSelection: "選択解除",
+
   // 重複検出 / コンフリクト解決
   secConflict: "重複の可能性",
   conflictHint: "同じ論文がすでに登録されている可能性があります。次のいずれかを選んでください。",
