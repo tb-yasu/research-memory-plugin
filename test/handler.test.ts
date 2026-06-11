@@ -329,6 +329,31 @@ test("saveIdea persists with defaults; listIdeas round-trips; invalid slug 400",
   assert.equal(bad.status, 400);
 });
 
+test("saveIdea mirrors markdown to ideas/<slug>.md; falls back to a field render; delete removes both", async () => {
+  const { plugin, store } = makeRuntime();
+
+  // With explicit markdown: persisted verbatim (newline-terminated).
+  const md = "# 圧縮アイディア\n\n**背景**: …\n\n**参考文献**\n- … (mem-a)";
+  await plugin.manageLiterature({ kind: "saveIdea", slug: "with-md", title: "t", description: "d", markdown: md });
+  assert.equal(store.get("ideas/with-md.md"), md + "\n");
+
+  // Without markdown: minimal deterministic render from the fields.
+  await plugin.manageLiterature({ kind: "saveIdea", slug: "no-md", title: "Plain idea", description: "Body.", motivation: "Gap." });
+  const rendered = store.get("ideas/no-md.md")!;
+  assert.match(rendered, /^# Plain idea\n/);
+  assert.match(rendered, /## 提案アイディア\nBody\./);
+  assert.match(rendered, /## 動機（問題と既存手法のギャップ）\nGap\./);
+
+  // updateIdea with new markdown rewrites the mirror.
+  await plugin.manageLiterature({ kind: "updateIdea", slug: "with-md", markdown: "# v2" });
+  assert.equal(store.get("ideas/with-md.md"), "# v2\n");
+
+  // delete removes JSON and .md.
+  await plugin.manageLiterature({ kind: "deleteIdea", slug: "with-md" });
+  assert.equal(store.has("ideas/with-md.json"), false);
+  assert.equal(store.has("ideas/with-md.md"), false);
+});
+
 test("saveIdea warns on unknown sourcePapers but still saves", async () => {
   const { plugin, store } = makeRuntime();
   const res = (await plugin.manageLiterature({

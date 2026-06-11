@@ -18,6 +18,10 @@ export const IdeaSchema = z.object({
   sourcePapers: z.array(z.string()).default([]), // card slugs the idea is grounded in
   themes: z.array(z.string()).default([]), // reuse the card/profile theme vocabulary
   status: IdeaStatusSchema.default("raw"),
+  // The idea's full presented text (the 8-element markdown shown in chat).
+  // The structured fields above are the queryable subset; this preserves
+  // the whole artifact and is mirrored to ideas/<slug>.md on every write.
+  markdown: z.string().optional(),
   created: z.string(),
   updated: z.string(),
 });
@@ -45,4 +49,24 @@ export function parseIdea(raw: string): Idea | null {
 export function mergeIdea(existing: Idea, patch: IdeaPatch, updated: string): Idea {
   const defined = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) as Partial<Idea>;
   return { ...existing, ...defined, updated };
+}
+
+/** The content of ideas/<slug>.md: the stored full markdown when the
+ *  LLM supplied one, else a minimal deterministic render of the
+ *  structured fields so the file is never empty or missing. */
+export function ideaToMarkdown(idea: Idea): string {
+  if (idea.markdown) return idea.markdown.endsWith("\n") ? idea.markdown : idea.markdown + "\n";
+  const lines = [
+    `# ${idea.title}`,
+    "",
+    `- status: ${idea.status}`,
+    idea.themes.length > 0 ? `- themes: ${idea.themes.join(", ")}` : "",
+    idea.sourcePapers.length > 0 ? `- sourcePapers: ${idea.sourcePapers.join(", ")}` : "",
+    "",
+    `## 提案アイディア`,
+    idea.description,
+    idea.motivation ? `\n## 動機（問題と既存手法のギャップ）\n${idea.motivation}` : "",
+    idea.firstExperiment ? `\n## 最初の実験\n${idea.firstExperiment}` : "",
+  ];
+  return lines.filter((line) => line !== "").join("\n") + "\n";
 }
