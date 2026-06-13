@@ -100,6 +100,13 @@ export default {
   ideateHint: "チャットで「選択した論文からアイデアを出して」と言うと生成します。",
   btnClearSelection: "選択解除",
 
+  // アイデア生成エンジン（Claude / Codex）
+  engineLabel: "アイデア生成エンジン",
+  engineModel: "モデル",
+  engineReasoning: "思考力",
+  engineCodexHint: "codex CLI と codex login が必要。使えるモデルは認証方式次第（ChatGPT ログインは gpt-5.5 のみ）。",
+  engineReasoningLevels: { low: "低", medium: "中", high: "高" } as Record<string, string>,
+
   // 重複検出 / コンフリクト解決
   secConflict: "重複の可能性",
   conflictHint: "同じ論文がすでに登録されている可能性があります。次のいずれかを選んでください。",

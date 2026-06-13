@@ -100,6 +100,13 @@ export default {
   ideateHint: "In chat, say “Propose ideas from the selected papers” to generate.",
   btnClearSelection: "Clear",
 
+  // Ideation engine (Claude vs Codex)
+  engineLabel: "Idea engine",
+  engineModel: "Model",
+  engineReasoning: "Reasoning",
+  engineCodexHint: "Needs the codex CLI + codex login. Model depends on your auth (ChatGPT login: gpt-5.5 only).",
+  engineReasoningLevels: { low: "Low", medium: "Medium", high: "High" } as Record<string, string>,
+
   // Duplicate detection / conflict resolution
   secConflict: "Possible duplicate",
   conflictHint: "This paper may already be in your library. Pick one of the options below.",

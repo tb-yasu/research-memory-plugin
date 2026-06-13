@@ -39,7 +39,12 @@ export default defineConfig({
       fileName: (_format, entryName) => `${entryName}.js`,
     },
     rollupOptions: {
-      external: ["vue", "gui-chat-protocol/vue"],
+      // node:child_process stays external: it's a Node core module (the
+      // server entry runs in the host's Node process to shell out to the
+      // `codex` CLI), always resolvable at runtime, so it must remain a
+      // real import — NOT a browser-external stub. "self-contained" (see
+      // header) concerns bare npm deps, not node core.
+      external: ["vue", "gui-chat-protocol/vue", "node:child_process"],
       output: {
         // The host runtime loader injects a stylesheet from
         // `${assetBase}/dist/style.css`. Vite's default would name

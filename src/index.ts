@@ -8,6 +8,7 @@
 // node:fs / node:path / console / direct fetch are all unused — every I/O
 // goes through the runtime. The gui-chat-protocol eslint preset enforces it.
 
+import { spawn } from "node:child_process";
 import { definePlugin } from "gui-chat-protocol";
 import { z } from "zod";
 import { TOOL_DEFINITION } from "./definition";
@@ -17,11 +18,13 @@ import { citationTable, toBibTeX, toMarkdownBundle, toReferenceList } from "./ci
 import { buildRelatedWorkOutline, relatedWorkToMarkdown, themeSlug } from "./relatedwork";
 import { EMPTY_PROFILE, mergeProfile, parseProfile, serializeProfile, type ProfilePatch, type ResearchProfile } from "./profile";
 import { fetchArxiv, fetchDoi, MetadataError } from "./metadata";
-import { annotateCandidates, searchSemanticScholar } from "./papersearch";
+import { annotateCandidates, mergeCandidates, searchArxiv, searchOpenAlex } from "./papersearch";
 import { fetchArxivFullText } from "./fulltext";
 import { IdeaSchema, IdeaStatusSchema, ideaToMarkdown, mergeIdea, parseIdea, serializeIdea, type Idea, type IdeaPatch } from "./idea";
 import { gatherIdeationMaterial } from "./ideate";
 import { EMPTY_SELECTION, parseSelection, serializeSelection, type IdeationSelection } from "./selection";
+import { CodexReasoningSchema, DEFAULT_ENGINE_CONFIG, EngineSchema, mergeEngineConfig, parseEngineConfig, serializeEngineConfig, type EngineConfig, type EngineConfigPatch } from "./engine";
+import { buildCodexIdeationPrompt, CodexError, runCodex } from "./codex";
 
 export { TOOL_DEFINITION };
 
@@ -29,6 +32,7 @@ const PAPERS_DIR = "papers";
 const IDEAS_DIR = "ideas";
 const PROFILE_FILE = "profile.json";
 const SELECTION_FILE = "ideation-selection.json";
+const ENGINE_CONFIG_FILE = "engine-config.json";
 const CHANGED = "changed";
 
 // Optional card fields shared by `save` and `update`. `save` overrides
@@ -83,7 +87,7 @@ const Args = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("getProfile") }),
   z.object({ kind: z.literal("setProfile"), focus: z.string().optional(), themes: z.array(z.string()).optional(), questions: z.array(z.string()).optional() }),
   z.object({ kind: z.literal("fetchMetadata"), arxivId: z.string().optional(), doi: z.string().optional() }),
-  z.object({ kind: z.literal("searchPapers"), query: z.string(), limit: z.number().int().optional(), yearFrom: z.number().int().optional(), yearTo: z.number().int().optional() }),
+  z.object({ kind: z.literal("searchPapers"), query: z.string(), limit: z.number().int().optional(), yearFrom: z.number().int().optional(), yearTo: z.number().int().optional(), venue: z.string().optional() }),
   z.object({ kind: z.literal("fetchFullText"), arxivId: z.string() }),
   z.object({ kind: z.literal("mergePapers"), ...cardFields, targetSlug: z.string() }),
   z.object({ kind: z.literal("ideate"), slugs: z.array(z.string()).optional(), theme: z.string().optional() }),
@@ -93,6 +97,8 @@ const Args = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("listIdeas"), theme: z.string().optional(), status: IdeaStatusSchema.optional() }),
   z.object({ kind: z.literal("setSelection"), slugs: z.array(z.string()) }),
   z.object({ kind: z.literal("getSelection") }),
+  z.object({ kind: z.literal("getEngineConfig") }),
+  z.object({ kind: z.literal("setEngineConfig"), engine: EngineSchema.optional(), codexModel: z.string().min(1).optional(), codexReasoning: CodexReasoningSchema.optional() }),
 ]);
 
 type SaveArgs = Extract<z.infer<typeof Args>, { kind: "save" }>;
@@ -151,7 +157,7 @@ export function ideationMessage(input: { paperCount: number; minable: string[]; 
     "(1) MINE — unless the user asked for a cards-only quick pass, spawn the `idea-miner` subagent via the Task tool for EACH paper with an arxivId" +
       (input.minable.length > 0 ? ` (${input.minable.join(", ")})` : "") +
       ", ALL in ONE turn so they run in parallel; pass each: the arXiv id, title, the user's language, a 2-3 line profile summary, and the card's relationToMyWork + known limitations. Papers without an arxivId (or if Task is unavailable) proceed on card material alone.",
-    "(2) SYNTHESIZE — generate 3-5 research ideas in the user's language. EVERY idea must cite the specific paper(s) and the specific material it builds on (a mined assumption/limitation/future-work hint, or a card's method/reusableIdea/nextAction, or a profile question); NEVER invent paper content beyond jsonData + mined material. Patterns: (a) a limitation or fragile assumption as the opportunity, (b) method transfer onto another paper's problem or the profile focus, (c) a profile open question × a technique from the papers, (d) combining papers that share a theme (see sharedThemes), (e) a future-work hint × the user's strengths. Each idea: a short title, then EIGHT labeled elements in the user's language (Japanese labels: 背景 / 解決したい問題 / 既存手法の問題点 / 提案アイディア / 期待される成果 / 社会的インパクト / 最初の実験 / 参考文献): (1) 背景 — the context in plain language, understandable WITHOUT having read the papers; (2) the problem it tackles; (3) the gap in existing methods, grounded in the 2-3 MOST relevant papers only — never an exhaustive enumeration; (4) the proposed idea and how it solves the problem; (5) expected outcomes, measurable where possible; (6) societal impact — concrete beneficiaries/use-cases in 1-2 sentences, no grandiose claims; (7) the smallest concrete first experiment; (8) 参考文献 — one reference line per paper CITED in this idea (only those), built from the jsonData bibliographic fields: Authors (first ± et al.) (Year). Title. Venue or arXiv:id. (slug) — never invent bibliographic data. WRITING QUALITY — ideas are prose the user reads, NOT compressed notes: write complete grammatical sentences (in Japanese: no 体言止め fragments, no telegraphic noun-chains, no nested-parenthesis pile-ups), 1-3 full sentences per element. Cite evidence inline at the END of the supporting sentence as (slug, §locator) — never as 「採掘：…」 insertions mid-clause.",
+    "(2) SYNTHESIZE — generate 3-5 research ideas in the user's language. EVERY idea must cite the specific paper(s) and the specific material it builds on (a mined assumption/limitation/future-work hint, or a card's method/reusableIdea/nextAction, or a profile question); NEVER invent paper content beyond jsonData + mined material. Patterns: (a) a limitation or fragile assumption as the opportunity, (b) method transfer onto another paper's problem or the profile focus, (c) a profile open question × a technique from the papers, (d) combining papers that share a theme (see sharedThemes), (e) a future-work hint × the user's strengths. Each idea: a short title, then EIGHT labeled elements in the user's language (Japanese labels: 背景 / 解決したい問題 / 既存手法の問題点 / 提案アイディア / 期待される成果 / 社会的インパクト / 最初の実験 / 参考文献): (1) 背景 — the context in plain language, understandable WITHOUT having read the papers; (2) the problem it tackles; (3) the gap in existing methods, grounded in the 2-3 MOST relevant papers only — never an exhaustive enumeration; (4) the proposed idea and how it solves the problem; (5) expected outcomes, measurable where possible; (6) societal impact — concrete beneficiaries/use-cases in 1-2 sentences, no grandiose claims; (7) the smallest concrete first experiment; (8) 参考文献 — one reference line per paper CITED in this idea (only those), built from the jsonData bibliographic fields: Authors (first ± et al.) (Year). Title. Venue or arXiv:id. (slug) — never invent bibliographic data. WRITING QUALITY — ideas are prose the user reads, NOT compressed notes: write complete grammatical sentences (in Japanese: no 体言止め fragments, no telegraphic noun-chains, no nested-parenthesis pile-ups), 1-3 full sentences per element. CRUCIAL — unpack every coined or compound term, especially an English-jargon noun-chain into plain Japanese on first use (state what it IS and what it DOES); never drop it as a self-explanatory label. BAD:「上書きを『新版の追記＋supersede エッジ』として記録する」 GOOD:「上書きのとき、古い版を消さず新しい版を追記し、さらに『新版が旧版を置き換えた』という関係リンクを張る」. A domain expert who has NOT read these papers must understand every sentence. Cite evidence inline at the END of the supporting sentence as (slug, §locator) — never as 「採掘：…」 insertions mid-clause.",
     "(3) ASK which ideas to keep; ONLY on explicit selection call saveIdea per chosen idea (kebab-case slug, title, description = 提案アイディア + 期待される成果, motivation = 解決したい問題 + 既存手法の問題点, firstExperiment = 最初の実験, sourcePapers = the cited card slugs, themes, AND markdown = the idea's full presented 8-element text VERBATIM — it is mirrored to ideas/<slug>.md). NEVER auto-save.",
   ];
   return parts.filter(Boolean).join(" ");
@@ -357,6 +363,21 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
     });
   }
 
+  async function readEngineConfig(): Promise<EngineConfig> {
+    if (!(await files.data.exists(ENGINE_CONFIG_FILE))) return DEFAULT_ENGINE_CONFIG;
+    return parseEngineConfig(await files.data.read(ENGINE_CONFIG_FILE)) ?? DEFAULT_ENGINE_CONFIG;
+  }
+
+  async function handleSetEngineConfig(patch: EngineConfigPatch): Promise<unknown> {
+    return withWriteLock(async () => {
+      const config = mergeEngineConfig(await readEngineConfig(), patch, nowIso());
+      await files.data.write(ENGINE_CONFIG_FILE, serializeEngineConfig(config));
+      pubsub.publish(CHANGED, { engineConfig: true });
+      const detail = config.engine === "codex" ? ` (model ${config.codexModel}, reasoning ${config.codexReasoning})` : "";
+      return { message: `Ideation engine set to ${config.engine}${detail}.`, jsonData: config };
+    });
+  }
+
   /** Resolve the ideation selection: union of explicit slugs (in request
    *  order) and a theme filter, deduped; `missing` = slugs not found. */
   async function resolveIdeationCards(slugs: string[], theme: string | undefined): Promise<{ cards: PaperCard[]; missing: string[] }> {
@@ -532,21 +553,34 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
           }
         }
         case "searchPapers": {
-          try {
-            const found = await searchSemanticScholar(args.query, { limit: args.limit, yearFrom: args.yearFrom, yearTo: args.yearTo }, fetch);
-            // Flag candidates the store already holds so the LLM marks
-            // them 登録済み instead of re-saving. No `data` field — the
-            // canvas stays untouched; the numbered list lives in chat.
-            const candidates = annotateCandidates(found, await listCards());
-            log.info("paper search", { query: args.query, hits: candidates.length });
-            return {
-              message: `Found ${candidates.length} candidate(s) for "${args.query}". Present them as a numbered list (mark existingSlugs entries as already registered) and ask the user which to register — do NOT save without an explicit selection.`,
-              jsonData: candidates,
-            };
-          } catch (err) {
-            if (err instanceof MetadataError) return { error: err.message, status: err.code === "not-found" ? 404 : 502 };
-            return { error: String(err), status: 500 };
+          // venue → OpenAlex only (arXiv preprints carry no structured venue).
+          // Otherwise run BOTH in parallel: OpenAlex (broad/established) +
+          // arXiv (freshest preprints OpenAlex still lags on), then merge &
+          // de-duplicate. One source failing never sinks the other.
+          const tasks = [searchOpenAlex(args.query, { limit: args.limit, yearFrom: args.yearFrom, yearTo: args.yearTo, venue: args.venue }, fetch)];
+          if (!args.venue) tasks.push(searchArxiv(args.query, { limit: args.limit, yearFrom: args.yearFrom }, fetch));
+          const [oaRes, axRes] = await Promise.allSettled(tasks);
+          const oaCands = oaRes.status === "fulfilled" ? oaRes.value : [];
+          const axCands = axRes && axRes.status === "fulfilled" ? axRes.value : [];
+          if (oaRes.status === "rejected" && (!axRes || axRes.status === "rejected")) {
+            const reason = oaRes.reason;
+            if (reason instanceof MetadataError) return { error: reason.message, status: reason.code === "not-found" ? 404 : 502 };
+            return { error: String(reason), status: 500 };
           }
+          // Flag candidates the store already holds so the LLM marks them
+          // 登録済み instead of re-saving. No `data` field — the canvas stays
+          // untouched; the numbered list lives in chat.
+          const candidates = annotateCandidates(mergeCandidates(oaCands, axCands), await listCards());
+          log.info("paper search", { query: args.query, openalex: oaCands.length, arxiv: axCands.length, merged: candidates.length });
+          const degraded = oaRes.status === "rejected" ? " (arXiv only — OpenAlex was unavailable)" : axRes && axRes.status === "rejected" ? " (OpenAlex only — arXiv was unavailable)" : "";
+          const sourceNote = args.venue ? "" : " Results merge OpenAlex (broad/established) + arXiv (freshest preprints), de-duplicated.";
+          const venueNote = args.venue
+            ? ` Note: the venue filter "${args.venue}" relies on OpenAlex's conference linkage, which is INCOMPLETE — many conference papers are indexed only under their arXiv preprint and won't match. If the list looks sparse, tell the user to drop the venue and rely on the topic + year.`
+            : "";
+          return {
+            message: `Found ${candidates.length} candidate(s) for "${args.query}"${args.venue ? ` (venue: ${args.venue})` : ""}${degraded}.${sourceNote} Present them as a numbered list (mark existingSlugs entries as already registered) and ask the user which to register — do NOT save without an explicit selection.${venueNote}`,
+            jsonData: candidates,
+          };
         }
         case "fetchFullText": {
           try {
@@ -579,6 +613,26 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
           }
           const material = gatherIdeationMaterial(cards, await readProfile());
           log.info("ideation material", { papers: cards.length, missing: missing.length });
+          // Engine switch: Codex synthesizes inside the plugin (shells out
+          // to the CLI) and returns ready-made ideas; Claude (default) gets
+          // material + the procedure message and synthesizes in chat.
+          const engineConfig = await readEngineConfig();
+          if (engineConfig.engine === "codex") {
+            try {
+              const ideasMarkdown = await runCodex(buildCodexIdeationPrompt(material), { model: engineConfig.codexModel, reasoning: engineConfig.codexReasoning }, spawn);
+              log.info("codex ideation", { papers: cards.length, model: engineConfig.codexModel, reasoning: engineConfig.codexReasoning });
+              const missingNote = missing.length > 0 ? ` ${missing.length} requested slug(s) not found: ${missing.join(", ")}.` : "";
+              return {
+                message:
+                  `Ideas generated by Codex (model ${engineConfig.codexModel}, reasoning ${engineConfig.codexReasoning}) from ${cards.length} paper(s).${missingNote} ` +
+                  "Present jsonData.ideasMarkdown to the user VERBATIM — do NOT regenerate, rewrite, or re-mine. Then ASK which ideas to keep and, only on explicit selection, call saveIdea per chosen idea (kebab-case slug, title, description = 提案アイディア + 期待される成果, motivation = 解決したい問題 + 既存手法の問題点, firstExperiment = 最初の実験, sourcePapers = the cited card slugs, themes, AND markdown = that idea's full 8-element text VERBATIM).",
+                jsonData: { engine: "codex", model: engineConfig.codexModel, reasoning: engineConfig.codexReasoning, ideasMarkdown, missingSlugs: missing, fromSelection },
+              };
+            } catch (err) {
+              if (err instanceof CodexError) return { error: err.message, status: err.code === "not-found" ? 503 : 502 };
+              return { error: String(err), status: 500 };
+            }
+          }
           // No `data` field — the canvas stays untouched; ideas live in chat.
           return {
             message: ideationMessage({
@@ -617,6 +671,12 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
           const selection = await readSelection();
           return { message: `Ideation selection: ${selection.slugs.length} paper(s).`, jsonData: selection };
         }
+        case "getEngineConfig": {
+          const config = await readEngineConfig();
+          return { message: `Ideation engine: ${config.engine}${config.engine === "codex" ? ` (model ${config.codexModel}, reasoning ${config.codexReasoning})` : ""}.`, jsonData: config };
+        }
+        case "setEngineConfig":
+          return handleSetEngineConfig({ engine: args.engine, codexModel: args.codexModel, codexReasoning: args.codexReasoning });
         default: {
           const exhaustive: never = args;
           throw new Error(`unknown kind: ${JSON.stringify(exhaustive)}`);

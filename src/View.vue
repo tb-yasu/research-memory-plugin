@@ -10,6 +10,7 @@ import { useRuntime } from "gui-chat-protocol/vue";
 import * as XLSX from "xlsx";
 import { useT } from "./lang";
 import { buildWorkbook } from "./excel";
+import { CODEX_MODELS, CODEX_REASONING_LEVELS, DEFAULT_ENGINE_CONFIG } from "./engine";
 
 interface CitationPurpose {
   purpose: string;
@@ -279,6 +280,40 @@ function toggleCheck(slug: string): void {
 function clearChecks(): void {
   checkedSlugs.clear();
   void persistSelection();
+}
+
+// ── ideation engine (Claude vs Codex) ───────────────────────────────────
+// Loosely typed: the <select>s bind plain strings; the server validates
+// them against the engine/reasoning enums on setEngineConfig.
+const engineConfig = reactive<{ engine: string; codexModel: string; codexReasoning: string }>({ ...DEFAULT_ENGINE_CONFIG });
+
+async function loadEngine(): Promise<void> {
+  try {
+    const res = await dispatch<{ jsonData?: { engine?: string; codexModel?: string; codexReasoning?: string } }>({ kind: "getEngineConfig" });
+    const c = res.jsonData;
+    if (c) {
+      engineConfig.engine = c.engine ?? DEFAULT_ENGINE_CONFIG.engine;
+      engineConfig.codexModel = c.codexModel ?? DEFAULT_ENGINE_CONFIG.codexModel;
+      engineConfig.codexReasoning = c.codexReasoning ?? DEFAULT_ENGINE_CONFIG.codexReasoning;
+    }
+  } catch (err) {
+    log.warn("loadEngine failed", { error: String(err) });
+  }
+}
+
+async function saveEngine(): Promise<void> {
+  // Omit codexModel when blank so the server keeps the prior value rather
+  // than rejecting the empty string (the schema requires non-empty).
+  const model = engineConfig.codexModel.trim();
+  try {
+    await dispatch({ kind: "setEngineConfig", engine: engineConfig.engine, codexModel: model || undefined, codexReasoning: engineConfig.codexReasoning });
+  } catch (err) {
+    log.warn("saveEngine failed", { error: String(err) });
+  }
+}
+
+function reasoningLabel(level: string): string {
+  return t.value.engineReasoningLevels[level] ?? level;
 }
 
 // ── data ───────────────────────────────────────────────────────────────
@@ -584,6 +619,7 @@ onMounted(() => {
   void refetch();
   void loadProfile();
   void loadSelection();
+  void loadEngine();
   unsubscribe = pubsub.subscribe("changed", () => {
     void refetch();
     void loadProfile();
@@ -745,6 +781,24 @@ onUnmounted(() => unsubscribe?.());
           <button class="btn primary" @click="openAdd">+ {{ t.btnAdd }}</button>
         </div>
       </header>
+
+      <div class="engine-bar">
+        <span class="engine-label">{{ t.engineLabel }}</span>
+        <select v-model="engineConfig.engine" class="select" :title="t.engineLabel" @change="saveEngine">
+          <option value="claude">Claude</option>
+          <option value="codex">Codex</option>
+        </select>
+        <template v-if="engineConfig.engine === 'codex'">
+          <input v-model="engineConfig.codexModel" class="engine-model" list="codex-models" :title="t.engineModel" :placeholder="t.engineModel" @change="saveEngine" />
+          <datalist id="codex-models">
+            <option v-for="m in CODEX_MODELS" :key="m" :value="m" />
+          </datalist>
+          <select v-model="engineConfig.codexReasoning" class="select" :title="t.engineReasoning" @change="saveEngine">
+            <option v-for="r in CODEX_REASONING_LEVELS" :key="r" :value="r">{{ reasoningLabel(r) }}</option>
+          </select>
+          <span class="engine-hint">{{ t.engineCodexHint }}</span>
+        </template>
+      </div>
 
       <div v-if="profile.focus" class="focus-banner">
         <span class="focus-label">{{ t.pFocus }}:</span> {{ profile.focus }}
@@ -1004,6 +1058,37 @@ onUnmounted(() => unsubscribe?.());
   font: inherit;
   font-size: 0.78rem;
   margin-left: 0.4rem;
+}
+.engine-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 1rem;
+  background: #f5f3ff;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 0.82rem;
+  color: #374151;
+}
+.engine-label {
+  font-weight: 600;
+  color: #6d28d9;
+  white-space: nowrap;
+}
+.engine-model {
+  width: 9rem;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  font: inherit;
+  font-size: 0.8rem;
+}
+.engine-hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #6b7280;
 }
 .selection-bar {
   display: flex;
