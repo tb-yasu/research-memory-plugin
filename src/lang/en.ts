@@ -93,6 +93,8 @@ export default {
   sortRecency: "Recent",
   sortTitle: "Title",
   noTheme: "(no theme)",
+  renameTheme: "Rename category",
+  renamePlaceholder: "New category name",
 
   // Ideation checkbox selection
   checkForIdeas: "Select for idea generation",

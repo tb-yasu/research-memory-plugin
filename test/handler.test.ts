@@ -103,6 +103,62 @@ test("save → list → read → update(merge) → citationTable → relatedWork
   assert.equal(store.has("papers/mem-a.json"), false);
 });
 
+test("renameTheme rewrites the theme across all sharing cards (.json + .md mirror) and reports count", async () => {
+  const { plugin, store } = makeRuntime();
+  await plugin.manageLiterature({ kind: "save", slug: "p-a", title: "A", themes: ["Linear Attention", "Associative Memory"] });
+  await plugin.manageLiterature({ kind: "save", slug: "p-b", title: "B", themes: ["Associative Memory"] });
+  await plugin.manageLiterature({ kind: "save", slug: "p-c", title: "C", themes: ["Linear Attention"] });
+
+  const res = (await plugin.manageLiterature({ kind: "renameTheme", from: "Associative Memory", to: "Key-Value Memory" })) as any;
+  assert.equal(res.data.view, "list");
+  assert.equal(res.jsonData.count, 2, "only the two cards using the theme are rewritten");
+  assert.deepEqual(res.jsonData, { from: "Associative Memory", to: "Key-Value Memory", count: 2 });
+
+  const a = JSON.parse(store.get("papers/p-a.json")!);
+  assert.deepEqual(a.themes, ["Linear Attention", "Key-Value Memory"]);
+  const b = JSON.parse(store.get("papers/p-b.json")!);
+  assert.deepEqual(b.themes, ["Key-Value Memory"]);
+  const c = JSON.parse(store.get("papers/p-c.json")!);
+  assert.deepEqual(c.themes, ["Linear Attention"], "untouched card keeps its themes");
+
+  // .md mirror's テーマ: line is regenerated.
+  assert.match(store.get("papers/p-a.md")!, /- テーマ: Linear Attention, Key-Value Memory/);
+});
+
+test("renameTheme onto an existing theme dedupes within a card", async () => {
+  const { plugin, store } = makeRuntime();
+  await plugin.manageLiterature({ kind: "save", slug: "p-a", title: "A", themes: ["X", "Y"] });
+  const res = (await plugin.manageLiterature({ kind: "renameTheme", from: "X", to: "Y" })) as any;
+  assert.equal(res.jsonData.count, 1);
+  assert.deepEqual(JSON.parse(store.get("papers/p-a.json")!).themes, ["Y"]);
+});
+
+test("renameTheme leaves created/updated untouched (category rename is not a content edit)", async () => {
+  const { plugin, store } = makeRuntime();
+  await plugin.manageLiterature({ kind: "save", slug: "p-a", title: "A", themes: ["X"] });
+  const before = JSON.parse(store.get("papers/p-a.json")!);
+  await plugin.manageLiterature({ kind: "renameTheme", from: "X", to: "Z" });
+  const after = JSON.parse(store.get("papers/p-a.json")!);
+  assert.equal(after.created, before.created);
+  assert.equal(after.updated, before.updated);
+});
+
+test("renameTheme with no card using the theme returns count:0 (not an error)", async () => {
+  const { plugin } = makeRuntime();
+  await plugin.manageLiterature({ kind: "save", slug: "p-a", title: "A", themes: ["X"] });
+  const res = (await plugin.manageLiterature({ kind: "renameTheme", from: "Ghost", to: "Z" })) as any;
+  assert.equal(res.jsonData.count, 0);
+  assert.equal(res.data.view, "list");
+});
+
+test("renameTheme rejects empty or identical from/to with 400", async () => {
+  const { plugin } = makeRuntime();
+  const empty = (await plugin.manageLiterature({ kind: "renameTheme", from: "  ", to: "Z" })) as any;
+  assert.equal(empty.status, 400);
+  const same = (await plugin.manageLiterature({ kind: "renameTheme", from: "X", to: " X " })) as any;
+  assert.equal(same.status, 400);
+});
+
 test("save rejects an invalid (non-kebab) slug", async () => {
   const { plugin } = makeRuntime();
   const res = (await plugin.manageLiterature({ kind: "save", slug: "Bad Slug", title: "x" })) as any;

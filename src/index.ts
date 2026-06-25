@@ -12,7 +12,7 @@ import { spawn } from "node:child_process";
 import { definePlugin } from "gui-chat-protocol";
 import { z } from "zod";
 import { TOOL_DEFINITION } from "./definition";
-import { CitationPurposeSchema, PaperCardSchema, findDuplicates, isValidSlug, mergeCard, mergeFull, parseCard, serializeCard, type CardPatch, type PaperCard } from "./card";
+import { applyThemeRename, cardToMarkdown, CitationPurposeSchema, PaperCardSchema, findDuplicates, isValidSlug, mergeCard, mergeFull, parseCard, serializeCard, type CardPatch, type PaperCard } from "./card";
 import { filterCards, sortCards } from "./search";
 import { citationTable, toBibTeX, toMarkdownBundle, toReferenceList } from "./citation";
 import { buildRelatedWorkOutline, relatedWorkToMarkdown, themeSlug } from "./relatedwork";
@@ -34,6 +34,10 @@ const PROFILE_FILE = "profile.json";
 const SELECTION_FILE = "ideation-selection.json";
 const ENGINE_CONFIG_FILE = "engine-config.json";
 const CHANGED = "changed";
+
+// Polite-pool contact for OpenAlex / Crossref. Unset → never appended
+// (behaviour identical to before). `process` is a node global, eslint-allowed.
+const MAILTO = process.env.RESEARCH_MEMORY_MAILTO?.trim() || undefined;
 
 // Optional card fields shared by `save` and `update`. `save` overrides
 // slug+title to required below; `update` leaves them optional (slug is the
@@ -81,6 +85,7 @@ const Args = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("save"), ...cardFields, slug: z.string(), title: z.string(), force: z.boolean().optional() }),
   z.object({ kind: z.literal("update"), ...cardFields, slug: z.string() }),
   z.object({ kind: z.literal("delete"), slug: z.string() }),
+  z.object({ kind: z.literal("renameTheme"), from: z.string(), to: z.string() }),
   z.object({ kind: z.literal("citationTable"), theme: z.string() }),
   z.object({ kind: z.literal("relatedWork"), theme: z.string() }),
   z.object({ kind: z.literal("export"), format: z.enum(["bibtex", "references", "markdown"]), scope: z.string().optional() }),
@@ -109,6 +114,12 @@ type UpdateIdeaArgs = Extract<z.infer<typeof Args>, { kind: "updateIdea" }>;
 
 function paperPath(slug: string): string {
   return `${PAPERS_DIR}/${slug}.json`;
+}
+
+// Human-readable mirror alongside the JSON store of record, so a wiki page
+// can link to papers/<slug>.md and render the card instead of raw JSON.
+function paperMdPath(slug: string): string {
+  return `${PAPERS_DIR}/${slug}.md`;
 }
 
 function ideaPath(slug: string): string {
@@ -200,9 +211,23 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
     return out;
   }
 
+  // JSON is the store of record; the .md mirror is the human-readable
+  // artifact a wiki page can link to (mirrors writeIdea's .json + .md).
   async function writeCard(card: PaperCard): Promise<void> {
     await files.data.write(paperPath(card.slug), serializeCard(card));
+    await files.data.write(paperMdPath(card.slug), cardToMarkdown(card));
     pubsub.publish(CHANGED, { slug: card.slug });
+  }
+
+  // One-time backfill: existing cards predate the .md mirror, so on load
+  // write any missing one (best-effort, never blocks the handler). New
+  // writes keep both in lockstep via writeCard.
+  async function backfillCardMarkdown(): Promise<void> {
+    for (const card of await listCards()) {
+      if (!(await files.data.exists(paperMdPath(card.slug)))) {
+        await files.data.write(paperMdPath(card.slug), cardToMarkdown(card));
+      }
+    }
   }
 
   async function handleSave(args: SaveArgs): Promise<unknown> {
@@ -307,9 +332,31 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
     return withWriteLock(async () => {
       if (!(await readCard(slug))) return { error: `not found: ${slug}`, status: 404 };
       await files.data.unlink(paperPath(slug));
+      if (await files.data.exists(paperMdPath(slug))) await files.data.unlink(paperMdPath(slug));
       pubsub.publish(CHANGED, { slug });
       const cards = sortCards(await listCards(), "recency");
       return { data: { view: "list", cards }, message: `Deleted ${slug}.` };
+    });
+  }
+
+  // Bulk-rename a theme across every card that uses it. Category headings
+  // group cards by theme, so renaming one tag must touch all sharers at
+  // once. created/updated stay put — a category rename is not content edit.
+  async function handleRenameTheme(from: string, to: string): Promise<unknown> {
+    const fromT = from.trim();
+    const toT = to.trim();
+    if (!fromT || !toT) return { error: "renameTheme requires non-empty from/to", status: 400 };
+    if (fromT === toT) return { error: "from and to are identical", status: 400 };
+    return withWriteLock(async () => {
+      let count = 0;
+      for (const card of await listCards()) {
+        const themes = applyThemeRename(card.themes, fromT, toT);
+        if (!themes) continue;
+        await writeCard({ ...card, themes }); // .json + .md mirror + CHANGED; created/updated untouched
+        count++;
+      }
+      const cards = sortCards(await listCards(), "recency");
+      return { data: { view: "list", cards }, message: `Renamed theme "${fromT}" → "${toT}" across ${count} card(s).`, jsonData: { from: fromT, to: toT, count } };
     });
   }
 
@@ -474,6 +521,10 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
     });
   }
 
+  // Best-effort, fire-and-forget: ensure pre-existing cards get their .md
+  // mirror without delaying plugin readiness or failing the load.
+  void backfillCardMarkdown().catch((err) => log.warn("card markdown backfill failed", { error: String(err) }));
+
   return {
     TOOL_DEFINITION,
 
@@ -500,6 +551,8 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
           return handleMerge(args);
         case "delete":
           return handleDelete(args.slug);
+        case "renameTheme":
+          return handleRenameTheme(args.from, args.to);
         case "citationTable": {
           const rows = citationTable(await listCards(), args.theme);
           return { data: { view: "citationTable", theme: args.theme, rows }, message: `Citation table for "${args.theme}": ${rows.length} row(s) in the panel.`, jsonData: rows };
@@ -542,7 +595,7 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
         case "fetchMetadata": {
           if (!args.arxivId && !args.doi) return { error: "fetchMetadata requires arxivId or doi", status: 400 };
           try {
-            const patch = args.arxivId ? await fetchArxiv(args.arxivId, fetch) : await fetchDoi(args.doi as string, fetch);
+            const patch = args.arxivId ? await fetchArxiv(args.arxivId, fetch) : await fetchDoi(args.doi as string, fetch, MAILTO);
             const label = args.arxivId ? `arXiv:${args.arxivId}` : `DOI:${args.doi}`;
             // No `data` field — the canvas stays untouched. The LLM uses
             // `jsonData` to compose a follow-up save call.
@@ -557,7 +610,7 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
           // Otherwise run BOTH in parallel: OpenAlex (broad/established) +
           // arXiv (freshest preprints OpenAlex still lags on), then merge &
           // de-duplicate. One source failing never sinks the other.
-          const tasks = [searchOpenAlex(args.query, { limit: args.limit, yearFrom: args.yearFrom, yearTo: args.yearTo, venue: args.venue }, fetch)];
+          const tasks = [searchOpenAlex(args.query, { limit: args.limit, yearFrom: args.yearFrom, yearTo: args.yearTo, venue: args.venue, mailto: MAILTO }, fetch)];
           if (!args.venue) tasks.push(searchArxiv(args.query, { limit: args.limit, yearFrom: args.yearFrom }, fetch));
           const [oaRes, axRes] = await Promise.allSettled(tasks);
           const oaCands = oaRes.status === "fulfilled" ? oaRes.value : [];

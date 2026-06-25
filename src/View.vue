@@ -282,6 +282,28 @@ function clearChecks(): void {
   void persistSelection();
 }
 
+// ── inline category (theme) rename ──────────────────────────────────────
+const renaming = reactive<{ theme: string | null; value: string }>({ theme: null, value: "" });
+function startRename(theme: string): void {
+  renaming.theme = theme;
+  renaming.value = theme;
+}
+function cancelRename(): void {
+  renaming.theme = null;
+}
+async function commitRename(): Promise<void> {
+  const from = renaming.theme;
+  const to = renaming.value.trim();
+  renaming.theme = null;
+  if (!from || !to || from === to) return;
+  try {
+    await dispatch({ kind: "renameTheme", from, to });
+    await refetch();
+  } catch (err) {
+    log.warn("renameTheme failed", { error: String(err) });
+  }
+}
+
 // ── ideation engine (Claude vs Codex) ───────────────────────────────────
 // Loosely typed: the <select>s bind plain strings; the server validates
 // them against the engine/reasoning enums on setEngineConfig.
@@ -815,11 +837,26 @@ onUnmounted(() => unsubscribe?.());
         <div class="list">
           <p v-if="groupedCards.length === 0" class="empty">{{ t.empty }}</p>
           <div v-for="g in groupedCards" :key="g.theme" class="group-block">
-            <button class="group-head" @click="toggleCollapse(g.theme)">
-              <span class="caret">{{ collapsed.has(g.theme) ? "▸" : "▾" }}</span>
-              <span class="group-name">{{ g.theme === NO_THEME ? t.noTheme : g.theme }}</span>
-              <span class="group-count">{{ g.cards.length }}</span>
-            </button>
+            <div class="group-head">
+              <button class="group-toggle" @click="toggleCollapse(g.theme)">
+                <span class="caret">{{ collapsed.has(g.theme) ? "▸" : "▾" }}</span>
+                <span v-if="renaming.theme !== g.theme" class="group-name">{{ g.theme === NO_THEME ? t.noTheme : g.theme }}</span>
+                <span class="group-count">{{ g.cards.length }}</span>
+              </button>
+              <template v-if="renaming.theme === g.theme">
+                <input
+                  v-model="renaming.value"
+                  class="rename-input"
+                  :placeholder="t.renamePlaceholder"
+                  @keyup.enter="commitRename"
+                  @keyup.escape="cancelRename"
+                  @click.stop
+                />
+                <button class="rename-btn" @click.stop="commitRename">{{ t.btnSave }}</button>
+                <button class="rename-btn" @click.stop="cancelRename">{{ t.btnCancel }}</button>
+              </template>
+              <button v-else-if="g.theme !== NO_THEME" class="rename-btn" :title="t.renameTheme" @click.stop="startRename(g.theme)">✎</button>
+            </div>
             <ul v-show="!collapsed.has(g.theme)" class="group-list">
               <li v-for="c in g.cards" :key="`${g.theme}/${c.slug}`" class="list-li">
                 <input type="checkbox" class="check" :checked="checkedSlugs.has(c.slug)" :title="t.checkForIdeas" @change="toggleCheck(c.slug)" />
@@ -1180,24 +1217,53 @@ onUnmounted(() => unsubscribe?.());
   border-bottom: 1px solid #eef0f3;
 }
 .group-head {
-  width: 100%;
   display: flex;
   align-items: center;
   gap: 0.35rem;
   padding: 0.4rem 0.6rem;
-  border: none;
   background: #eef2ff;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.76rem;
-  font-weight: 700;
-  color: #3730a3;
   position: sticky;
   top: 0;
   z-index: 1;
 }
 .group-head:hover {
   background: #e0e7ff;
+}
+.group-toggle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #3730a3;
+}
+.rename-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #c7d2fe;
+  border-radius: 0.25rem;
+  padding: 0.15rem 0.35rem;
+  font: inherit;
+  font-size: 0.76rem;
+}
+.rename-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  color: #4338ca;
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.25rem;
+}
+.rename-btn:hover {
+  background: #c7d2fe;
 }
 .caret {
   width: 0.8rem;

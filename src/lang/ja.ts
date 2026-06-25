@@ -93,6 +93,8 @@ export default {
   sortRecency: "新しい順",
   sortTitle: "タイトル順",
   noTheme: "（テーマなし）",
+  renameTheme: "カテゴリ名を変更",
+  renamePlaceholder: "新しいカテゴリ名",
 
   // アイデア生成のチェックボックス選択
   checkForIdeas: "アイデア生成に選択",

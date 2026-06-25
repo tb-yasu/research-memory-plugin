@@ -23,6 +23,13 @@ export type FetchFn = (url: string, opts?: FetchOptions) => Promise<Response>;
 
 const TIMEOUT_MS = 15_000;
 
+/** Append a `mailto` query param (OpenAlex / Crossref polite pool). Empty or
+ *  undefined leaves the URL unchanged. Picks `?` vs `&` by existing query. */
+export function withMailto(url: string, mailto: string | undefined): string {
+  if (!mailto) return url;
+  return url + (url.includes("?") ? "&" : "?") + "mailto=" + encodeURIComponent(mailto);
+}
+
 // ── arXiv ────────────────────────────────────────────────────────────
 
 const ARXIV_ENDPOINT = "https://export.arxiv.org/api/query";
@@ -142,8 +149,8 @@ export function parseCrossrefWork(work: CrossrefWork): MetadataPatch {
   return patch;
 }
 
-export async function fetchDoi(doi: string, fetchImpl: FetchFn): Promise<MetadataPatch> {
-  const url = `${CROSSREF_ENDPOINT}/${encodeURIComponent(doi.trim())}`;
+export async function fetchDoi(doi: string, fetchImpl: FetchFn, mailto?: string): Promise<MetadataPatch> {
+  const url = withMailto(`${CROSSREF_ENDPOINT}/${encodeURIComponent(doi.trim())}`, mailto);
   let res: Response;
   try {
     res = await fetchImpl(url, { timeoutMs: TIMEOUT_MS, allowedHosts: CROSSREF_HOSTS });
@@ -165,7 +172,7 @@ export async function fetchDoi(doi: string, fetchImpl: FetchFn): Promise<Metadat
 
 // ── helpers ──────────────────────────────────────────────────────────
 
-function decodeXml(s: string): string {
+export function decodeXml(s: string): string {
   return s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'");
 }
 

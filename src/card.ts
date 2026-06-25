@@ -75,6 +75,69 @@ export function mergeCard(existing: PaperCard, patch: CardPatch, updated: string
   return { ...existing, ...defined, updated };
 }
 
+// ── Human-readable mirror (papers/<slug>.md) ─────────────────────────
+// A clean Markdown render of the card — the Ochiai 6-question template +
+// the relational spine — so a wiki page (or any file browser) can link to
+// papers/<slug>.md and read the card without seeing the JSON source. JSON
+// stays the store of record; index.ts regenerates this on every write,
+// mirroring the ideas/<slug>.md pattern. Pure (no I/O). Empty sections are
+// omitted so the page stays tight. Labels match the canvas View (ja).
+
+/** "Authors (Year). Venue. arXiv:id · DOI · URL" — only the parts present. */
+function cardByline(card: PaperCard): string {
+  const who = card.authors.length > 0 ? card.authors.join(", ") : "";
+  const head = [who, card.year != null ? `(${card.year})` : ""].filter(Boolean).join(" ");
+  const ids = [card.venue, card.arxivId ? `arXiv:${card.arxivId}` : "", card.doi ? `DOI:${card.doi}` : "", card.url].filter(Boolean);
+  return [head, ids.join(" · ")].filter(Boolean).join(". ");
+}
+
+export function cardToMarkdown(card: PaperCard): string {
+  const out: string[] = [`# ${card.title}`];
+  const byline = cardByline(card);
+  if (byline) out.push("", `*${byline}*`);
+  if (card.themes.length > 0) out.push("", `- テーマ: ${card.themes.join(", ")}`);
+
+  const para = (heading: string, body: string | undefined): void => {
+    if (body && body.trim()) out.push("", `### ${heading}`, body.trim());
+  };
+  const list = (heading: string, items: string[]): void => {
+    if (items.length > 0) out.push("", `### ${heading}`, ...items.map((i) => `- ${i}`));
+  };
+
+  const hasPaper = card.summary || card.novelty || card.claims.length || card.method || card.evaluation || card.limitations.length || card.relatedPapers.length;
+  if (hasPaper) out.push("", "## 論文");
+  para("1. どんなもの？", card.summary);
+  if (card.novelty || card.claims.length) {
+    para("2. 先行研究と比べてどこがすごい？", card.novelty);
+    if (card.claims.length > 0) out.push(...card.claims.map((c) => `- ${c}`));
+  }
+  para("3. 技術・手法のキモ", card.method);
+  para("4. どうやって有効だと検証した？", card.evaluation);
+  list("5. 議論はあるか？", card.limitations);
+  list("6. 次に読むべき論文", card.relatedPapers);
+
+  const hasSpine = card.relationToMyWork || card.researchContext || card.citationPurposes.length || card.reusableIdeas.length || card.nextActions.length;
+  if (hasSpine) out.push("", "## 自分の研究との接続");
+  para("自分の研究・開発にどう関係するか", card.relationToMyWork);
+  para("研究文脈", card.researchContext);
+  if (card.citationPurposes.length > 0) {
+    out.push("", "### どの目的で引用できるか", ...card.citationPurposes.map((cp) => `- ${cp.purpose}${cp.suggestedSection ? ` — ${cp.suggestedSection}` : ""}`));
+  }
+  list("再利用できる考え方", card.reusableIdeas);
+  list("次にやること", card.nextActions);
+
+  return out.join("\n") + "\n";
+}
+
+// ── Theme rename ─────────────────────────────────────────────────────
+
+/** themes 内の from を to に置換した新配列を返す。from を含まなければ null
+ *  （変更なし＝書き込み不要）。to が既存なら順序を保って de-dup する。 */
+export function applyThemeRename(themes: string[], from: string, to: string): string[] | null {
+  if (!themes.includes(from)) return null;
+  return [...new Set(themes.map((t) => (t === from ? to : t)))];
+}
+
 // ── Duplicate detection ──────────────────────────────────────────────
 
 /** Lowercase, strip punctuation, collapse whitespace. Used for fuzzy
