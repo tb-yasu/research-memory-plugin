@@ -1,5 +1,7 @@
 # Research Memory
 
+English | [日本語](README.ja.md)
+
 A [MulmoClaude](https://github.com/receptron/mulmoclaude) runtime plugin for *research-connected memory*. **Today's scope: literature** — turning the papers you read into a relational, queryable store, not summaries. The longer arc generalizes the spine to a research-state model — Claim / Evidence / Decision / Context (see [Roadmap](#roadmap)).
 
 > Reading a paper and summarizing it is easy and commoditized. The hard part is remembering, months later, *how this paper relates to your own research* and *where you can reuse it*. This plugin captures exactly that, and lets you (and an LLM) query it.
@@ -159,7 +161,7 @@ yarn test     # tsx --test: card schema, search/ranking, citation/BibTeX, Relate
 
 ## Roadmap
 
-This is the *capture* on-ramp. The longer arc generalizes the relational spine into a research-state model — **Claim / Evidence / Decision / Context** — to support not just papers but research decisions ("why I dropped this dataset"), rebuttal support (which result answers a reviewer), and project resume ("where did I leave off?"). Near-term: a theme/citation graph, semantic scholar / OpenAlex as additional metadata sources, and richer near-match heuristics for the soft-duplicate warning.
+This is the *capture* on-ramp. The longer arc generalizes the relational spine into a research-state model — **Claim / Evidence / Decision / Context** — to support not just papers but research decisions ("why I dropped this dataset"), rebuttal support (which result answers a reviewer), and project resume ("where did I leave off?"). Near-term: a theme/citation graph, more metadata sources (DBLP, Semantic Scholar) and citation-graph data, and richer near-match heuristics for the soft-duplicate warning.
 
 ## License
 
