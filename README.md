@@ -2,118 +2,112 @@
 
 English | [日本語](README.ja.md)
 
-A [MulmoClaude](https://github.com/receptron/mulmoclaude) runtime plugin for *research-connected memory*. **Today's scope: literature** — turning the papers you read into a relational, queryable store, not summaries. The longer arc generalizes the spine to a research-state model — Claim / Evidence / Decision / Context (see [Roadmap](#roadmap)).
+Research Memory is a [MulmoClaude](https://github.com/receptron/mulmoclaude) plugin for turning papers into **reusable research memory**.
 
-> Reading a paper and summarizing it is easy and commoditized. The hard part is remembering, months later, *how this paper relates to your own research* and *where you can reuse it*. This plugin captures exactly that, and lets you (and an LLM) query it.
+It doesn't just save summaries. For each paper it records *why the paper matters to your own research*: how it relates to your work, where you might cite it, which ideas you can reuse, and what to do next. The goal is simple — months later, you should be able to ask not only "what did this paper say?" but also "why did I care?" and "how can I use it now?"
 
-Every paper is stored as a **Paper Card**: the paper's own content (summary, claims, method, limitations) **plus the relational spine** — the part Zotero/Notion don't have:
+## Quick start
 
-- **Relation to my work** — competitor / related / inspiration / contrast, specifically.
-- **Citation purposes** — what you'd cite it for, and in which section (Related Work, Method, …).
-- **Reusable ideas** — techniques you could borrow.
-- **Next actions** — papers to read, experiments to try.
-- **Themes** — research threads, used by the filter, the citation table, and Related Work grouping.
+For *using* the plugin. Assumes [MulmoClaude](https://github.com/receptron/mulmoclaude) is already cloned and runnable (Node 20+, yarn).
 
-## What you can do
+```bash
+git clone https://github.com/tb-yasu/research-memory-plugin.git
+cd research-memory-plugin
+yarn install && yarn build
+```
 
-- **Capture from chat** — paste an abstract or just say `arXiv:2401.12345` / `DOI:10.xxxx/yyyy`; the plugin auto-fills the metadata (title, authors, year, venue, abstract, URL) from arXiv or Crossref, and the LLM adds the relational spine relative to your research focus.
-- **Find papers by theme** — `2024年以降の Agentic Memory の論文を探して` searches OpenAlex + arXiv (merged & de-duplicated; year range, up to 100 hits per source, optional venue), marks candidates already in your store, and registers only the ones you pick.
-- **Full-paper reading on registration** — picked candidates with an arXiv id get their body fetched (arxiv.org/html, ar5iv fallback; references stripped, middle elided) so the card is a full Ochiai extraction, not an abstract dump. With the optional `paper-reader` subagent (`examples/agents/`), each paper is read in a disposable context — in parallel, without bloating the chat.
-- **Next-research ideas from selected papers** — `さっき登録した3本から次の研究アイデアを出して`: the plugin gathers ideation material (limitations, methods, reusable ideas, your relation notes + research profile), the optional `idea-miner` subagent re-reads each paper's body for fuel the cards don't record (fragile assumptions, future-work hints), and the LLM synthesizes 3-5 grounded ideas. Keep the good ones as Idea records (`ideas/<slug>.json`, linked to their source papers, with a raw → exploring → adopted/dropped lifecycle). Papers can also be picked with **checkboxes in the canvas list** — the selection persists server-side, and `選択した論文からアイデアを出して` in chat picks it up (a View button cannot start the LLM — the plugin runtime has no chat-injection API). Theme-wide selections get a confirm-the-list step first; checkbox/slug selections run immediately.
-- **Choose the idea engine — Claude or Codex** — the canvas panel has an *Idea engine* switch. With **Claude** (default) the host synthesizes in chat as above. With **Codex** the plugin shells out to the `codex` CLI (`codex exec`, prompt on stdin, sandboxed read-only) and returns ready-made ideas — you also pick the **model** (editable; suggestions in the dropdown) and the **reasoning effort** (思考力: low / medium / high, mapped to `model_reasoning_effort`). The choice persists in `engine-config.json` and applies to every `ideate` call. **Requires the `codex` CLI installed on the host and a completed `codex login`.** Which models are valid depends on the codex auth: a **ChatGPT-account** login accepts only the codex default (**gpt-5.5** as of codex 0.139), while an **OpenAI API key** unlocks gpt-5-codex / gpt-5 / o3 / o4-mini — type whatever your account supports. (`minimal` reasoning is intentionally omitted: codex's default web_search / image_gen tools are rejected under it.) The Codex path uses the gathered card material; it does not run the `idea-miner` full-text subagents (those are Claude-only).
-- **Search & filter** — full-text search, theme filter, and *year-from* filter over your whole corpus (deterministic, in the plugin).
-- **Citation table** — for a theme, get a table of *which paper to cite, for what, in which section* — straight into your Related Work.
-- **Related Work outline** — one step past the citation table: ask `Generate a Related Work outline for theme: Agentic Memory` and the reply IS the outline markdown — paper groups (by co-occurring themes), each group's discussion points (your own *Relation to my work* notes), each paper's 要点 (novelty/summary) and citation purposes. Extraction, grouping, and ordering are deterministic in the plugin; the LLM may only smooth the bullets into prose — grounded in the card content, never reordering or inventing papers. Papers missing a citation purpose are flagged so you can fill the gap before writing. Each call also persists the markdown to `related-work/<theme-slug>.md` in the plugin's data dir (one file per theme, overwritten) — files are the source of truth, so later "save it / draft on it" requests just read the file.
-- **Readable card mirror + wiki links** — every saved card is mirrored to a clean `papers/<slug>.md` (the Ochiai template + relational spine), regenerated on each write. Link to a card from a wiki page (or anywhere a workspace link renders) with `[Title](data/plugins/research-memory-plugin/papers/<slug>.md)` — it opens as rendered Markdown, never the raw JSON. The JSON stays the store of record; the `.md` is the human-readable view.
-- **Export** — BibTeX, a numbered reference list, a markdown bundle, or an Excel workbook.
-- **Research profile** — capture your current focus, themes, and open questions; the LLM uses this to ground every paper's *Relation to my work* and *Citation purposes*.
-- **Duplicate detection + merge** — re-registering the same paper (by DOI, arXiv id, or near-identical title) blocks the save and offers *merge*, *overwrite*, or *skip*. Merging unions arrays and preserves your relational spine — the LLM never silently overwrites months-old notes.
-- **Add/edit by hand** — a form in the canvas; the plugin is fully usable without the LLM.
+Then boot MulmoClaude with the plugin loaded. The bundled `./dev.sh` is the recommended path — point `MULMO_DIR` at your MulmoClaude checkout:
 
-## How it works (design)
+```bash
+MULMO_DIR=/abs/path/to/mulmoclaude ./dev.sh
+```
 
-This follows MulmoClaude's architecture — *the API/logic is the product; GUI and LLM are both clients of it*:
+Finally:
 
-- **The plugin (TypeScript) owns all deterministic logic** — schema & validation, storage (one JSON file per paper under `files.data`), search/ranking, the citation table, the Related Work outline, and BibTeX/reference/markdown export. Pure, unit-tested modules (`card.ts`, `search.ts`, `citation.ts`, `relatedwork.ts`).
-- **The chat LLM does only natural-language extraction** — turning a pasted abstract into structured card fields. That instruction lives in a workspace **role prompt**, not in code.
+1. Copy [`examples/research-role.json`](examples/research-role.json) to `~/mulmoclaude/config/roles/research.json` (this role grants the tool and teaches the LLM to extract Paper Cards).
+2. Open <http://localhost:5173/> and pick the **Research** role.
 
-So the "intelligence" is the LLM; the plugin is a dependable, testable store with a real UI.
+Paste an abstract or say `Register arXiv:2504.19482` and your first card appears. (For the manual / contributor setup, see [Development](#development).)
 
-| Module | Responsibility |
-|---|---|
-| `src/card.ts` | `PaperCard` schema, JSON (de)serialize, slug rules, partial-merge, duplicate detection + two-card `mergeFull` |
-| `src/search.ts` | `filterCards` / `rankCards` / `sortCards` (keyword + recency + year-from) |
-| `src/citation.ts` | `citationTable`, `toBibTeX`, `toReferenceList`, `toMarkdownBundle` |
-| `src/relatedwork.ts` | `buildRelatedWorkOutline` (co-theme grouping, chronological order, discussion points, purpose ranking, gap detection) + `relatedWorkToMarkdown` |
-| `src/profile.ts` | `ResearchProfile` read / write (focus / themes / open questions) |
-| `src/metadata.ts` | arXiv Atom + Crossref/DOI parsers; returns a `MetadataPatch` the LLM passes to `save` |
-| `src/papersearch.ts` | OpenAlex + arXiv search (relevance, year range, venue→source id, limit clamp, gist truncation), candidate merge/de-dup, and existing-card annotation |
-| `src/fulltext.ts` | arXiv HTML / ar5iv full-text fetcher (markup stripped, references cut, middle elided) for full-Ochiai extraction |
-| `src/idea.ts` | `Idea` schema (description / motivation / firstExperiment / sourcePapers / status lifecycle), JSON (de)serialize, partial-merge |
-| `src/ideate.ts` | `gatherIdeationMaterial` — per-card ideation fuel + profile + shared themes + thin-card detection (deterministic; the LLM does the ideation) |
-| `src/engine.ts` | `EngineConfig` (engine claude/codex + Codex model + reasoning effort) read / write / merge — the ideation-engine switch |
-| `src/codex.ts` | Codex CLI bridge: `buildCodexArgs` / `buildCodexIdeationPrompt` / `runCodex` (`codex exec`, prompt on stdin, spawn injected for tests) |
-| `src/excel.ts` | XLSX workbook for the Excel export |
-| `src/index.ts` | `definePlugin` factory: CRUD + list/search + citationTable + relatedWork + export + profile + fetchMetadata/searchPapers/fetchFullText + ideate (Claude or Codex engine) + idea CRUD + conflict-aware save/mergePapers |
-| `src/View.vue` | browse (list + detail + theme/year filter + search), citation-table mode, Related Work outline mode, export, add/edit form, profile editor, conflict resolver |
+## Features
 
-The MCP tool is `manageLiterature` (kinds: `list`, `read`, `save`, `update`, `delete`, `citationTable`, `relatedWork`, `export`, `getProfile`, `setProfile`, `fetchMetadata`, `mergePapers`, `searchPapers`, `fetchFullText`, `ideate`, `saveIdea`, `listIdeas`, `updateIdea`, `deleteIdea`, `setSelection`, `getSelection`, `getEngineConfig`, `setEngineConfig`).
+- Register papers from an arXiv ID, DOI, or pasted abstract — metadata auto-filled from arXiv / Crossref.
+- Store each paper as a structured **Paper Card** with research notes: relevance, citation purpose, reusable ideas, next actions, themes.
+- Find papers by theme across **OpenAlex + arXiv**, and register only the ones you pick.
+- Search and filter your library by keyword, theme, and year.
+- Generate **citation tables** and **Related Work outlines** for a theme.
+- Turn selected papers into grounded **next-research ideas** (via Claude or Codex).
+- Export to BibTeX, a reference list, Markdown, or Excel.
+- Detect duplicates and merge records without clobbering months-old notes.
+- Mirror each card to readable Markdown (`papers/<slug>.md`) so wiki pages can link to it.
+- Add and edit cards by hand in the canvas — fully usable without the LLM.
 
-### Optional subagents (parallel reading without context bloat)
+## Core concepts
 
-Two Claude Code subagent definitions live in [`examples/agents/`](examples/agents/): `paper-reader` (register one paper: fetch body → full Ochiai card) and `idea-miner` (mine one paper's body for idea fuel). To enable them in MulmoClaude:
+- **Paper Card** — one JSON record per paper. The paper's own content (summary, claims, method, limitations) plus your notes, captured as structured reading notes (an Ochiai-style 6-question template).
+- **Relational spine** — Research Memory stores not just *what a paper says*, but *how it relates to your research*. That relation layer is the relational spine — relation to my work, citation purposes, reusable ideas, next actions, themes. It is the part Zotero / Notion don't have.
+- **Research profile** — your current focus, themes, and open questions. The LLM uses it to ground each card's *relation to my work* and *citation purposes*.
 
-1. Copy them to `~/mulmoclaude/.claude/agents/`.
+## Usage example
+
+In the **Research** role:
+
+1. **Register by identifier** — "Register `arXiv:2504.19482`" → metadata is fetched, then the LLM adds the relational spine from your profile.
+2. **Register by abstract** — "Register this paper in my Agentic Memory context: \<abstract\>" (when there's no arXiv id or DOI).
+3. **Find papers** — "2024年以降の Agentic Memory の論文を探して" → pick which to register.
+4. **Citation table** — "Give me the citation table for Agentic Memory".
+5. **Related Work outline** — "Generate a Related Work outline for theme: Agentic Memory" → the reply *is* the outline; then "draft the Related Work prose on top of this outline".
+6. **Export** — "Export BibTeX for the Compressed Indexing theme".
+
+To seed sample data so these work immediately, see [Seed demo data](#seed-demo-data).
+
+## Advanced
+
+### Full-text reading on registration
+
+Picked candidates with an arXiv id get their body fetched (arxiv.org/html, with an ar5iv fallback; references stripped, middle elided) so the card is a full structured extraction, not an abstract dump.
+
+### Subagents (optional)
+
+Two Claude Code subagent definitions live in [`examples/agents/`](examples/agents/): `paper-reader` (register one paper: fetch body → full card) and `idea-miner` (mine one paper's body for idea fuel). They read each paper in a disposable context — in parallel, without bloating the chat. To enable:
+
+1. Copy [`examples/agents/`](examples/agents/) to `~/mulmoclaude/.claude/agents/`.
 2. Allow the Task tool: `~/mulmoclaude/config/settings.json` → `{ "extraAllowedTools": ["Task"] }`.
 
-Without them everything still works — the agent falls back to inline `fetchFullText` / card-only ideation.
+Without them everything still works — the plugin falls back to inline full-text fetch / card-only ideation.
 
-## Install & use in MulmoClaude
+### Idea engine: Claude or Codex
 
-For just *using* the plugin (not hacking on it). Assumes [MulmoClaude](https://github.com/receptron/mulmoclaude) is already cloned and runnable, with Node 20+ and yarn.
+The canvas panel has an *Idea engine* switch. With **Claude** (default) the host synthesizes ideas in chat. With **Codex** the plugin shells out to the `codex` CLI (`codex exec`, prompt on stdin, sandboxed read-only) and returns ready-made ideas; you also pick the model and the reasoning effort (思考力: low / medium / high). The choice persists in `engine-config.json`.
 
-1. **Clone & build this plugin:**
+Codex requires the `codex` CLI installed and a completed `codex login`. Valid models depend on the auth: a **ChatGPT-account** login accepts only the codex default (`gpt-5.5` as of codex 0.139); an **OpenAI API key** unlocks `gpt-5-codex` / `gpt-5` / `o3` / `o4-mini`. The Codex path uses the gathered card material only (it does not run the `idea-miner` subagents).
 
-   ```bash
-   git clone https://github.com/tb-yasu/research-memory-plugin.git
-   cd research-memory-plugin
-   yarn install && yarn build
-   ```
+## Configuration
 
-2. **Load it as a dev plugin.** Easiest is the bundled `./dev.sh`, which kills any stale MulmoClaude stack, then boots exactly one with this plugin loaded (sandbox off, so the agent sees your workspace papers). Point `MULMO_DIR` at your MulmoClaude checkout:
+- **`MULMO_DIR`** — where your MulmoClaude checkout lives (used by `dev.sh`).
+- **`RESEARCH_MEMORY_MAILTO`** — set to your email to join the OpenAlex / Crossref [polite pool](https://docs.openalex.org/how-to-use-the-api/rate-limits-and-authentication#the-polite-pool) (better throttling under load). Unset, behaviour is unchanged. `dev.sh` forwards it:
 
-   ```bash
-   MULMO_DIR=/abs/path/to/mulmoclaude ./dev.sh
-   ```
+  ```bash
+  RESEARCH_MEMORY_MAILTO=you@example.com MULMO_DIR=/abs/path/to/mulmoclaude ./dev.sh
+  ```
 
-   `dev.sh` errors out if `MULMO_DIR` doesn't exist, so it never silently falls back to someone else's path. Prefer to wire it up by hand? Run MulmoClaude with the env var directly:
+## Limitations
 
-   ```bash
-   MULMOCLAUDE_DEV_PLUGINS=/abs/path/to/research-memory-plugin yarn dev   # in the mulmoclaude repo
-   ```
+- Full-text extraction supports **arXiv (HTML) only**; other sources fall back to the metadata abstract.
+- Codex-based ideation requires the Codex CLI and `codex login`; available models depend on the auth method.
+- The canvas View cannot directly trigger the host LLM — selected papers are persisted server-side and picked up from a chat phrase (the plugin runtime has no chat-injection API).
+- OpenAlex conference-venue linkage is incomplete; prefer topic + year, use the venue filter only as a refinement.
 
-3. **Add the Research role.** Copy [`examples/research-role.json`](examples/research-role.json) to `~/mulmoclaude/config/roles/research.json` (its `prompt` is what teaches the LLM to extract Paper Cards). If the role doesn't show up, recreate it from the in-app `/roles` UI.
+## Development
 
-4. **(Optional) Subagents** for parallel paper reading without context bloat — copy [`examples/agents/`](examples/agents/) to `~/mulmoclaude/.claude/agents/` and allow the Task tool in `~/mulmoclaude/config/settings.json` → `{ "extraAllowedTools": ["Task"] }`. See [Optional subagents](#optional-subagents-parallel-reading-without-context-bloat) below.
-
-5. **(Optional) Polite pool.** Set `RESEARCH_MEMORY_MAILTO=you@example.com` to name yourself to OpenAlex / Crossref (their [polite pool](https://docs.openalex.org/how-to-use-the-api/rate-limits-and-authentication#the-polite-pool) — better throttling behaviour under load). Unset, the plugin behaves exactly as before. `dev.sh` forwards this env var through to MulmoClaude:
-
-   ```bash
-   RESEARCH_MEMORY_MAILTO=you@example.com MULMO_DIR=/abs/path/to/mulmoclaude ./dev.sh
-   ```
-
-6. Open <http://localhost:5173/> and pick the **Research** role.
-
-> Full-text fetch on registration covers **arXiv (HTML) only**; other sources fall back to the abstract from metadata.
-
-## Develop against MulmoClaude
+For *modifying* the plugin.
 
 ```bash
 yarn install
 yarn build            # produces dist/index.js + dist/vue.js (required before loading)
 ```
 
-Then load it as a dev plugin (two terminals):
+Load it as a dev plugin (two terminals):
 
 ```bash
 # Terminal A — keep dist/ fresh on every save
@@ -123,17 +117,17 @@ yarn dev              # vite build --watch
 mulmoclaude --dev-plugin /ABS/PATH/TO/research-memory-plugin
 ```
 
-Running MulmoClaude **from a source checkout** instead of the published launcher? The launcher just sets `MULMOCLAUDE_DEV_PLUGINS`, so the equivalent is:
+Running MulmoClaude from a source checkout instead of the published launcher? The launcher just sets `MULMOCLAUDE_DEV_PLUGINS`, so the equivalent is:
 
 ```bash
 MULMOCLAUDE_DEV_PLUGINS=/ABS/PATH/TO/research-memory-plugin yarn dev   # in the mulmoclaude repo
 ```
 
-### Make the tool callable (required)
+### Make the tool callable
 
-Runtime-plugin tools are gated by a role's `availablePlugins`. Add a role at `~/mulmoclaude/config/roles/research.json` granting `manageLiterature` (a ready-made one is in [`examples/research-role.json`](examples/research-role.json) — its `prompt` is what teaches the LLM to extract Paper Cards). If the role doesn't appear, create the same role from the in-app `/roles` UI. Then pick the **Research** role in a chat.
+Runtime-plugin tools are gated by a role's `availablePlugins`. Add the role at `~/mulmoclaude/config/roles/research.json` (ready-made in [`examples/research-role.json`](examples/research-role.json)); if it doesn't appear, recreate it from the in-app `/roles` UI. Then pick the **Research** role.
 
-### Seed the demo data
+### Seed demo data
 
 ```bash
 mkdir -p ~/mulmoclaude/data/plugins/research-memory-plugin/papers
@@ -141,23 +135,42 @@ cp examples/papers/*.json ~/mulmoclaude/data/plugins/research-memory-plugin/pape
 cp examples/profile.json  ~/mulmoclaude/data/plugins/research-memory-plugin/profile.json
 ```
 
-Seven sample cards across *Agentic Memory*, *Counterfactual Recourse*, and *Compressed Indexing* so search / theme filter / citation table / Related Work outline / export all work immediately — plus a pre-filled research profile so the *Relation to my work* fields are grounded from the start. (The two *Agentic Memory* cards carry co-themes — *Memory Architecture* / *Memory Retrieval* — which is what the Related Work outline groups by.)
+Seven sample cards across *Agentic Memory*, *Counterfactual Recourse*, and *Compressed Indexing* (plus a pre-filled profile) so search / theme filter / citation table / Related Work outline / export all work immediately.
 
-## Demo (the loop)
-
-1. **Capture by identifier** — Research role → "Register `arXiv:2504.19482` for me" → fetchMetadata fills title / authors / year / venue / abstract / URL, then the LLM adds the relational spine from your profile.
-2. **Capture by abstract** — "Register this paper in my Agentic Memory context: \<abstract\>" → same result when you don't have an arXiv id or DOI.
-3. **Search** — "Search my papers for recourse cost".
-4. **Citation table** — "Give me the citation table for Agentic Memory".
-5. **Related Work outline** — "Generate a Related Work outline for theme: Agentic Memory" → the chat reply renders the outline markdown (paper groups / discussion points / 要点 / citation purposes, gaps flagged) and the panel shows the same skeleton; then ask "draft the Related Work prose on top of this outline" and the LLM writes around it without reshuffling.
-6. **Export** — "Export BibTeX for the Compressed Indexing theme".
-7. **Avoid silent overwrites** — try to register the same paper again → the conflict panel shows *merge* / *overwrite* / *skip*; pick *merge* and the relational spine survives.
-
-## Tests
+### Tests
 
 ```bash
-yarn test     # tsx --test: card schema, search/ranking, citation/BibTeX, Related Work outline grouping, profile read-write, Excel export, arXiv/Crossref parsers, duplicate detection + two-card merge, fixtures, and an end-to-end handler round-trip
+yarn test     # tsx --test: schema, search/ranking, citation/BibTeX, Related Work grouping,
+              # profile read-write, Excel export, arXiv/Crossref parsers, duplicate detection
+              # + two-card merge, theme rename, card markdown mirror, and an end-to-end handler round-trip
 ```
+
+## Architecture
+
+Research Memory follows MulmoClaude's architecture — *the API/logic is the product; the GUI and the LLM are both clients of it*:
+
+- **The plugin (TypeScript) owns the reproducible logic** — schema & validation, storage (one JSON file per paper under `files.data`), search/ranking, the citation table, the Related Work outline, and export. These need to be repeatable and testable, so they run in code, not the LLM. Pure, unit-tested modules.
+- **The chat LLM does only natural-language extraction** — turning a pasted abstract into structured card fields. That instruction lives in a workspace **role prompt**, not in code.
+
+| Module | Responsibility |
+|---|---|
+| `src/card.ts` | `PaperCard` schema, JSON (de)serialize, slug rules, partial-merge, duplicate detection + two-card `mergeFull`, theme rename, Markdown mirror |
+| `src/search.ts` | `filterCards` / `rankCards` / `sortCards` (keyword + recency + year-from) |
+| `src/citation.ts` | `citationTable`, `toBibTeX`, `toReferenceList`, `toMarkdownBundle` |
+| `src/relatedwork.ts` | `buildRelatedWorkOutline` (co-theme grouping, chronological order, discussion points, gap detection) + `relatedWorkToMarkdown` |
+| `src/profile.ts` | `ResearchProfile` read / write |
+| `src/metadata.ts` | arXiv Atom + Crossref/DOI parsers; polite-pool `mailto` helper |
+| `src/papersearch.ts` | OpenAlex + arXiv search (relevance, year range, venue→source id, gist truncation), candidate merge/de-dup, existing-card annotation |
+| `src/fulltext.ts` | arXiv HTML / ar5iv full-text fetcher (markup stripped, references cut, middle elided) |
+| `src/idea.ts` / `src/ideate.ts` | `Idea` schema; ideation material gathering (the LLM/Codex does the ideation) |
+| `src/engine.ts` / `src/codex.ts` | idea-engine config (Claude/Codex) + Codex CLI bridge |
+| `src/excel.ts` | XLSX workbook for the Excel export |
+| `src/index.ts` | `definePlugin` factory wiring every operation to `files.data` |
+| `src/View.vue` | the canvas UI (browse / detail / citation table / Related Work / export / forms) |
+
+### MCP tool reference
+
+The MCP tool is `manageLiterature`. Kinds: `list`, `read`, `save`, `update`, `delete`, `renameTheme`, `citationTable`, `relatedWork`, `export`, `getProfile`, `setProfile`, `fetchMetadata`, `mergePapers`, `searchPapers`, `fetchFullText`, `ideate`, `saveIdea`, `listIdeas`, `updateIdea`, `deleteIdea`, `setSelection`, `getSelection`, `getEngineConfig`, `setEngineConfig`.
 
 ## Roadmap
 
