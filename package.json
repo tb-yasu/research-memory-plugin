@@ -1,5 +1,5 @@
 {
-  "name": "research-memory-plugin",
+  "name": "paper-memory",
   "version": "0.1.0",
   "description": "Personal Literature Memory — turn papers you read into reusable, research-connected memory. A MulmoClaude runtime plugin.",
   "type": "module",
@@ -52,11 +52,11 @@
   "author": "Yasuo Tabei",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tb-yasu/research-memory-plugin.git"
+    "url": "git+https://github.com/tb-yasu/paper-memory.git"
   },
-  "homepage": "https://github.com/tb-yasu/research-memory-plugin#readme",
+  "homepage": "https://github.com/tb-yasu/paper-memory#readme",
   "bugs": {
-    "url": "https://github.com/tb-yasu/research-memory-plugin/issues"
+    "url": "https://github.com/tb-yasu/paper-memory/issues"
   },
   "dependencies": {
     "xlsx": "^0.18.5"

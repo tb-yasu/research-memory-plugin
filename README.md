@@ -1,8 +1,8 @@
-# Research Memory
+# Paper Memory
 
 English | [日本語](README.ja.md)
 
-Research Memory is a [MulmoClaude](https://github.com/receptron/mulmoclaude) plugin for turning papers into **reusable research memory**.
+Paper Memory is a [MulmoClaude](https://github.com/receptron/mulmoclaude) plugin for turning papers into **reusable research memory**.
 
 It doesn't just save summaries. For each paper it records *why the paper matters to your own research*: how it relates to your work, where you might cite it, which ideas you can reuse, and what to do next. The goal is simple — months later, you should be able to ask not only "what did this paper say?" but also "why did I care?" and "how can I use it now?"
 
@@ -13,8 +13,8 @@ For *using* the plugin. Assumes [MulmoClaude](https://github.com/receptron/mulmo
 1. **Clone & build the plugin:**
 
    ```bash
-   git clone https://github.com/tb-yasu/research-memory-plugin.git
-   cd research-memory-plugin
+   git clone https://github.com/tb-yasu/paper-memory.git
+   cd paper-memory
    yarn install && yarn build
    ```
 
@@ -46,7 +46,7 @@ Paste an abstract or say `Register arXiv:2504.19482` and your first card appears
 ## Core concepts
 
 - **Paper Card** — one JSON record per paper. The paper's own content (summary, claims, method, limitations) plus your notes, captured as structured reading notes (an Ochiai-style reading template).
-- **Relational spine** — Research Memory stores not just *what a paper says*, but *how it relates to your research*. That relation layer is the relational spine — relation to my work, citation purposes, reusable ideas, next actions, themes. It's what general-purpose reference managers don't make easy to keep structured.
+- **Relational spine** — Paper Memory stores not just *what a paper says*, but *how it relates to your research*. That relation layer is the relational spine — relation to my work, citation purposes, reusable ideas, next actions, themes. It's what general-purpose reference managers don't make easy to keep structured.
 - **Research profile** — your current focus, themes, and open questions. The LLM uses it to ground each card's *relation to my work* and *citation purposes*.
 
 ## Usage example
@@ -115,13 +115,13 @@ Load it as a dev plugin (two terminals):
 yarn dev              # vite build --watch
 
 # Terminal B — boot MulmoClaude with this plugin loaded
-mulmoclaude --dev-plugin /ABS/PATH/TO/research-memory-plugin
+mulmoclaude --dev-plugin /ABS/PATH/TO/paper-memory
 ```
 
 Running MulmoClaude from a source checkout instead of the published launcher? The launcher just sets `MULMOCLAUDE_DEV_PLUGINS`, so the equivalent is:
 
 ```bash
-MULMOCLAUDE_DEV_PLUGINS=/ABS/PATH/TO/research-memory-plugin yarn dev   # in the mulmoclaude repo
+MULMOCLAUDE_DEV_PLUGINS=/ABS/PATH/TO/paper-memory yarn dev   # in the mulmoclaude repo
 ```
 
 ### Role setup
@@ -131,9 +131,9 @@ The plugin's tool is gated by a role's `availablePlugins`. If you followed [Quic
 ### Seed demo data
 
 ```bash
-mkdir -p ~/mulmoclaude/data/plugins/research-memory-plugin/papers
-cp examples/papers/*.json ~/mulmoclaude/data/plugins/research-memory-plugin/papers/
-cp examples/profile.json  ~/mulmoclaude/data/plugins/research-memory-plugin/profile.json
+mkdir -p ~/mulmoclaude/data/plugins/paper-memory/papers
+cp examples/papers/*.json ~/mulmoclaude/data/plugins/paper-memory/papers/
+cp examples/profile.json  ~/mulmoclaude/data/plugins/paper-memory/profile.json
 ```
 
 Seven sample cards across *Agentic Memory*, *Counterfactual Recourse*, and *Compressed Indexing* (plus a pre-filled profile) so search / theme filter / citation table / Related Work outline / export all work immediately.
@@ -148,7 +148,7 @@ yarn test     # tsx --test: schema, search/ranking, citation/BibTeX, Related Wor
 
 ## Architecture
 
-Research Memory follows MulmoClaude's architecture — *the API/logic is the product; the GUI and the LLM are both clients of it*:
+Paper Memory follows MulmoClaude's architecture — *the API/logic is the product; the GUI and the LLM are both clients of it*:
 
 - **The plugin (TypeScript) owns the reproducible logic** — schema & validation, storage (one JSON file per paper under `files.data`), search/ranking, the citation table, the Related Work outline, and export. These need to be repeatable and testable, so they run in code, not the LLM. Pure, unit-tested modules.
 - **The chat LLM does only natural-language extraction** — turning a pasted abstract into structured card fields. That instruction lives in a workspace **role prompt**, not in code.

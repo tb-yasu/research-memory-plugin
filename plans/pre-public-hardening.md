@@ -2,7 +2,7 @@
 
 ## 0. 背景・ゴール
 
-research-memory-plugin を **GitHub 公開（clone → MulmoClaude の dev-plugin として利用）** する。
+paper-memory を **GitHub 公開（clone → MulmoClaude の dev-plugin として利用）** する。
 コア機能は揃っているため、公開前に必要なのは「OSS の体裁」「他人が使い始められる導線」
 「公開 API への行儀」。ユーザー選択により次の 4 項目を実装する。
 
@@ -12,7 +12,7 @@ research-memory-plugin を **GitHub 公開（clone → MulmoClaude の dev-plugi
 - D. dev.sh の可搬化
 
 確定情報: 著者 = Yasuo Tabei（`yasuo.tabei@gmail.com`）、
-remote = `git@github.com:tb-yasu/research-memory-plugin.git`。
+remote = `git@github.com:tb-yasu/paper-memory.git`。
 
 非対象（公開後で可）: テーマ untag、レスポンスキャッシュ、非 arXiv / PDF 全文、追加ロケール。
 
@@ -30,9 +30,9 @@ remote = `git@github.com:tb-yasu/research-memory-plugin.git`。
 既存に加えて以下を追加（npm 公開はしないが、公開リポジトリの体裁として）:
 
 ```jsonc
-"repository": { "type": "git", "url": "git+https://github.com/tb-yasu/research-memory-plugin.git" },
-"homepage": "https://github.com/tb-yasu/research-memory-plugin#readme",
-"bugs": { "url": "https://github.com/tb-yasu/research-memory-plugin/issues" },
+"repository": { "type": "git", "url": "git+https://github.com/tb-yasu/paper-memory.git" },
+"homepage": "https://github.com/tb-yasu/paper-memory#readme",
+"bugs": { "url": "https://github.com/tb-yasu/paper-memory/issues" },
 "author": "Yasuo Tabei",
 "keywords": ["mulmoclaude", "gui-chat-protocol", "plugin", "research", "literature",
              "papers", "arxiv", "openalex", "crossref", "citations", "zettelkasten"]
@@ -62,7 +62,7 @@ remote = `git@github.com:tb-yasu/research-memory-plugin.git`。
 2. このプラグインを clone → `yarn install && yarn build`。
 3. dev-plugin としてロード:
    - 推奨: 同梱の `./dev.sh`（`MULMO_DIR` を MulmoClaude の場所に。下記 D）。
-   - or 手動: MulmoClaude 側で `MULMOCLAUDE_DEV_PLUGINS=/abs/path/to/research-memory-plugin yarn dev`。
+   - or 手動: MulmoClaude 側で `MULMOCLAUDE_DEV_PLUGINS=/abs/path/to/paper-memory yarn dev`。
 4. Research ロール設置: `examples/research-role.json` を `~/mulmoclaude/config/roles/research.json` にコピー。
 5. （任意）subagents: `examples/agents/` を `~/mulmoclaude/.claude/agents/` にコピー＋
    `~/mulmoclaude/config/settings.json` に `{ "extraAllowedTools": ["Task"] }`（既存 README 記述を参照）。
@@ -179,9 +179,9 @@ MIT 全文、`Copyright (c) 2026 Yasuo Tabei`。
 
 ```jsonc
 "author": "Yasuo Tabei",
-"repository": { "type": "git", "url": "git+https://github.com/tb-yasu/research-memory-plugin.git" },
-"homepage": "https://github.com/tb-yasu/research-memory-plugin#readme",
-"bugs": { "url": "https://github.com/tb-yasu/research-memory-plugin/issues" },
+"repository": { "type": "git", "url": "git+https://github.com/tb-yasu/paper-memory.git" },
+"homepage": "https://github.com/tb-yasu/paper-memory#readme",
+"bugs": { "url": "https://github.com/tb-yasu/paper-memory/issues" },
 ```
 
 ### Step 3 — CI（新規 `.github/workflows/ci.yml`）

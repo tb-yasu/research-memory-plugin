@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Clean single-stack dev launcher for the research-memory-plugin demo.
+# Clean single-stack dev launcher for the paper-memory demo.
 #
 # Why this exists: running `yarn dev` twice leaves TWO servers fighting
 # over port 3001. The auth token (regenerated per startup, mirrored to

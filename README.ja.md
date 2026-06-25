@@ -1,8 +1,8 @@
-# Research Memory
+# Paper Memory
 
 [English](README.md) | 日本語
 
-Research Memory は、読んだ論文を「後で研究に再利用できる形」で保存する [MulmoClaude](https://github.com/receptron/mulmoclaude) プラグインです。
+Paper Memory は、読んだ論文を「後で研究に再利用できる形」で保存する [MulmoClaude](https://github.com/receptron/mulmoclaude) プラグインです。
 
 単なる要約ではなく、その論文が *自分の研究にどう関係するか*、どこで引用できるか、どのアイデアを再利用できるか、次に何をすべきかを記録します。目的はシンプルで、数か月後に「この論文は何を言っていたか」だけでなく「なぜ重要だったのか」「今の研究にどう使えるのか」を思い出せるようにすることです。
 
@@ -13,8 +13,8 @@ Research Memory は、読んだ論文を「後で研究に再利用できる形�
 1. **プラグインを clone & build:**
 
    ```bash
-   git clone https://github.com/tb-yasu/research-memory-plugin.git
-   cd research-memory-plugin
+   git clone https://github.com/tb-yasu/paper-memory.git
+   cd paper-memory
    yarn install && yarn build
    ```
 
@@ -46,7 +46,7 @@ abstract を貼るか「`arXiv:2504.19482` を登録して」と言えば、最�
 ## 中核となる概念
 
 - **Paper Card** — 論文1件 = 1 JSON レコード。論文自体の内容（要約・主張・手法・限界）に、あなたのメモを加えたもの。落合フォーマット風の構造化読解メモとして保存します。
-- **relational spine（関係の背骨）** — Research Memory は、論文が *何を言っているか* だけでなく、*自分の研究にどう関係するか* も保存します。この関係の層を relational spine と呼びます — 自分の研究との関係・引用目的・再利用アイデア・次にやること・テーマ。一般的な文献管理ツールでは構造化して残しにくい部分です。
+- **relational spine（関係の背骨）** — Paper Memory は、論文が *何を言っているか* だけでなく、*自分の研究にどう関係するか* も保存します。この関係の層を relational spine と呼びます — 自分の研究との関係・引用目的・再利用アイデア・次にやること・テーマ。一般的な文献管理ツールでは構造化して残しにくい部分です。
 - **研究プロフィール** — 現在のフォーカス・テーマ・問い。LLM が各カードの *自分の研究との関係* と *引用目的* を grounding するのに使います。
 
 ## 使用例
@@ -115,13 +115,13 @@ dev plugin としてロード（ターミナル2枚）:
 yarn dev              # vite build --watch
 
 # ターミナル B — このプラグインを載せて MulmoClaude を起動
-mulmoclaude --dev-plugin /ABS/PATH/TO/research-memory-plugin
+mulmoclaude --dev-plugin /ABS/PATH/TO/paper-memory
 ```
 
 公開ランチャーではなくソースチェックアウトから MulmoClaude を動かす場合、ランチャーは `MULMOCLAUDE_DEV_PLUGINS` を設定しているだけなので、等価なのは:
 
 ```bash
-MULMOCLAUDE_DEV_PLUGINS=/ABS/PATH/TO/research-memory-plugin yarn dev   # mulmoclaude リポジトリ内で
+MULMOCLAUDE_DEV_PLUGINS=/ABS/PATH/TO/paper-memory yarn dev   # mulmoclaude リポジトリ内で
 ```
 
 ### Research ロールの設定
@@ -131,9 +131,9 @@ MULMOCLAUDE_DEV_PLUGINS=/ABS/PATH/TO/research-memory-plugin yarn dev   # mulmocl
 ### デモデータの投入
 
 ```bash
-mkdir -p ~/mulmoclaude/data/plugins/research-memory-plugin/papers
-cp examples/papers/*.json ~/mulmoclaude/data/plugins/research-memory-plugin/papers/
-cp examples/profile.json  ~/mulmoclaude/data/plugins/research-memory-plugin/profile.json
+mkdir -p ~/mulmoclaude/data/plugins/paper-memory/papers
+cp examples/papers/*.json ~/mulmoclaude/data/plugins/paper-memory/papers/
+cp examples/profile.json  ~/mulmoclaude/data/plugins/paper-memory/profile.json
 ```
 
 *Agentic Memory*・*Counterfactual Recourse*・*Compressed Indexing* にまたがるサンプルカード7枚（＋記入済みプロフィール）。検索 / テーマフィルタ / 引用表 / Related Work アウトライン / エクスポートがすぐ動きます。
@@ -148,7 +148,7 @@ yarn test     # tsx --test: スキーマ、検索/ランキング、引用/BibTe
 
 ## アーキテクチャ
 
-Research Memory は MulmoClaude のアーキテクチャに従います — *API/ロジックが製品で、GUI も LLM もそのクライアント*:
+Paper Memory は MulmoClaude のアーキテクチャに従います — *API/ロジックが製品で、GUI も LLM もそのクライアント*:
 
 - **プラグイン（TypeScript）が再現性の必要なロジックを持つ** — スキーマ＆検証、ストレージ（`files.data` 下に論文1件 = 1 JSON）、検索/ランキング、引用表、Related Work アウトライン、エクスポート。検索・重複検出・エクスポートなど再現性が必要な処理は、LLM ではなくコード側で実行します。純粋でユニットテスト済みのモジュールです。
 - **チャット LLM は自然言語抽出のみ** — 貼られた abstract を構造化カードフィールドに変換するだけ。その指示はコードではなくワークスペースの **role prompt** にあります。

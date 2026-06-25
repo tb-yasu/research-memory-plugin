@@ -471,7 +471,7 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
       log.info("idea saved", { slug: idea.slug });
       const unknown = await unknownSourcePapers(args.sourcePapers);
       const envelope: Record<string, unknown> = {
-        message: `Saved idea "${idea.title}" (${idea.slug}), grounded in ${idea.sourcePapers.length} paper(s). Markdown mirrored to data/plugins/research-memory-plugin/${ideaMdPath(idea.slug)}.${idea.markdown ? "" : " No `markdown` was supplied — the .md is a minimal field render; pass the idea's full presented text in `markdown` to preserve it."}`,
+        message: `Saved idea "${idea.title}" (${idea.slug}), grounded in ${idea.sourcePapers.length} paper(s). Markdown mirrored to data/plugins/paper-memory/${ideaMdPath(idea.slug)}.${idea.markdown ? "" : " No `markdown` was supplied — the .md is a minimal field render; pass the idea's full presented text in `markdown` to preserve it."}`,
         jsonData: idea,
       };
       if (unknown.length > 0) envelope.warning = [`unknown sourcePapers (no card with these slugs): ${unknown.join(", ")}`];
@@ -576,7 +576,7 @@ export default definePlugin(({ pubsub, files, log, fetch }) => {
           // what produces broken, telegraphic prose.
           return {
             data: { view: "relatedWork", outline, markdown },
-            message: `Related Work outline for "${args.theme}": ${outline.paperCount} paper(s) in ${outline.groups.length} group(s). Saved to data/plugins/research-memory-plugin/${mdPath} (overwritten per theme). Reproduce the markdown from jsonData in your reply VERBATIM — do not rewrite, merge, summarize, or relabel its bullets (translate the fixed Japanese labels only if the user writes in another language). To reuse the outline later (saving elsewhere, drafting prose), call relatedWork again or read the saved file — NEVER reconstruct the format by hand or from plugin source. If the user wants full Related Work prose, write it separately: one paragraph per group, complete sentences, each claim grounded only in that paper's own bullets.`,
+            message: `Related Work outline for "${args.theme}": ${outline.paperCount} paper(s) in ${outline.groups.length} group(s). Saved to data/plugins/paper-memory/${mdPath} (overwritten per theme). Reproduce the markdown from jsonData in your reply VERBATIM — do not rewrite, merge, summarize, or relabel its bullets (translate the fixed Japanese labels only if the user writes in another language). To reuse the outline later (saving elsewhere, drafting prose), call relatedWork again or read the saved file — NEVER reconstruct the format by hand or from plugin source. If the user wants full Related Work prose, write it separately: one paragraph per group, complete sentences, each claim grounded only in that paper's own bullets.`,
             jsonData: markdown,
           };
         }
