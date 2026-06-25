@@ -4,28 +4,29 @@
 
 Research Memory は、読んだ論文を「後で研究に再利用できる形」で保存する [MulmoClaude](https://github.com/receptron/mulmoclaude) プラグインです。
 
-単なる要約ではなく、その論文が *自分の研究にどう関係するか* を記録します — どう関係するか、どこで引用できるか、どのアイデアを再利用できるか、次に何をすべきか。目的はシンプルで、数か月後に「この論文は何を言っていたか」だけでなく「なぜ重要だったのか」「今の研究にどう使えるのか」を思い出せるようにすることです。
+単なる要約ではなく、その論文が *自分の研究にどう関係するか*、どこで引用できるか、どのアイデアを再利用できるか、次に何をすべきかを記録します。目的はシンプルで、数か月後に「この論文は何を言っていたか」だけでなく「なぜ重要だったのか」「今の研究にどう使えるのか」を思い出せるようにすることです。
 
 ## クイックスタート
 
 プラグインを *使う* ための手順です。[MulmoClaude](https://github.com/receptron/mulmoclaude) が clone 済みで動く状態（Node 20+ / yarn）を前提とします。
 
-```bash
-git clone https://github.com/tb-yasu/research-memory-plugin.git
-cd research-memory-plugin
-yarn install && yarn build
-```
+1. **プラグインを clone & build:**
 
-次に、プラグインを載せた MulmoClaude を起動します。推奨は同梱の `./dev.sh` で、`MULMO_DIR` を MulmoClaude の場所に向けます:
+   ```bash
+   git clone https://github.com/tb-yasu/research-memory-plugin.git
+   cd research-memory-plugin
+   yarn install && yarn build
+   ```
 
-```bash
-MULMO_DIR=/abs/path/to/mulmoclaude ./dev.sh
-```
+2. **Research ロールを設置**（起動前に置くと MulmoClaude が確実に拾います）: [`examples/research-role.json`](examples/research-role.json) を `~/mulmoclaude/config/roles/research.json` にコピー。このロールがツールを許可し、LLM に Paper Card の抽出を教えます。
 
-最後に:
+3. **プラグインを載せた MulmoClaude を起動。** 推奨は同梱の `./dev.sh`。`MULMO_DIR` を MulmoClaude の場所に向けます:
 
-1. [`examples/research-role.json`](examples/research-role.json) を `~/mulmoclaude/config/roles/research.json` にコピー（このロールがツールを許可し、LLM に Paper Card の抽出を教えます）。
-2. <http://localhost:5173/> を開き **Research** ロールを選択。
+   ```bash
+   MULMO_DIR=/abs/path/to/mulmoclaude ./dev.sh
+   ```
+
+4. **<http://localhost:5173/> を開き** **Research** ロールを選択。
 
 abstract を貼るか「`arXiv:2504.19482` を登録して」と言えば、最初のカードができます。（手動セットアップやコントリビュータ向けは [開発](#開発) を参照。）
 
@@ -44,8 +45,8 @@ abstract を貼るか「`arXiv:2504.19482` を登録して」と言えば、最�
 
 ## 中核となる概念
 
-- **Paper Card** — 論文1件 = 1 JSON レコード。論文自体の内容（要約・主張・手法・限界）に、あなたのメモを加えたもの。構造化された読解メモ（落合フォーマット風の6項目テンプレート）として保存します。
-- **relational spine（関係の背骨）** — Research Memory は、論文が *何を言っているか* だけでなく、*自分の研究にどう関係するか* も保存します。この関係の層を relational spine と呼びます — 自分の研究との関係・引用目的・再利用アイデア・次にやること・テーマ。Zotero / Notion には無い部分です。
+- **Paper Card** — 論文1件 = 1 JSON レコード。論文自体の内容（要約・主張・手法・限界）に、あなたのメモを加えたもの。落合フォーマット風の構造化読解メモとして保存します。
+- **relational spine（関係の背骨）** — Research Memory は、論文が *何を言っているか* だけでなく、*自分の研究にどう関係するか* も保存します。この関係の層を relational spine と呼びます — 自分の研究との関係・引用目的・再利用アイデア・次にやること・テーマ。一般的な文献管理ツールでは構造化して残しにくい部分です。
 - **研究プロフィール** — 現在のフォーカス・テーマ・問い。LLM が各カードの *自分の研究との関係* と *引用目的* を grounding するのに使います。
 
 ## 使用例
@@ -61,7 +62,7 @@ abstract を貼るか「`arXiv:2504.19482` を登録して」と言えば、最�
 
 これらをすぐ試すためのサンプルデータ投入は [デモデータの投入](#デモデータの投入) を参照。
 
-## 応用
+## 高度な使い方
 
 ### 登録時の全文読み込み
 
@@ -80,7 +81,7 @@ arXiv id のある候補は本文を取得し（arxiv.org/html、無ければ ar
 
 canvas パネルに *Idea engine* スイッチがあります。**Claude**（既定）はホストがチャットで合成。**Codex** はプラグインが `codex` CLI を起動し（`codex exec`、prompt は stdin、sandbox は read-only）、完成済みのアイデアを返します。モデルと思考力（low / medium / high）も選べます。選択は `engine-config.json` に永続化されます。
 
-Codex には `codex` CLI のインストールと `codex login` が必要です。使えるモデルは認証方式次第で、**ChatGPT アカウント**ログインは codex 既定（codex 0.139 時点で `gpt-5.5`）のみ、**OpenAI API キー**なら `gpt-5-codex` / `gpt-5` / `o3` / `o4-mini` が使えます。Codex 経路は集めたカード素材のみを使います（`idea-miner` subagent は走りません）。
+Codex には `codex` CLI のインストールと `codex login` が必要です。使えるモデルは認証方式（と Codex CLI のバージョン）に依存します。**ChatGPT アカウント**ログインは codex 既定のモデルのみ、**OpenAI API キー**なら全モデル（`gpt-5-codex` / `gpt-5` / `o` 系 など）が使えます。Codex 経路は集めたカード素材のみを使います（`idea-miner` subagent は走りません）。
 
 ## 設定
 
@@ -123,9 +124,9 @@ mulmoclaude --dev-plugin /ABS/PATH/TO/research-memory-plugin
 MULMOCLAUDE_DEV_PLUGINS=/ABS/PATH/TO/research-memory-plugin yarn dev   # mulmoclaude リポジトリ内で
 ```
 
-### ツールを呼べるようにする
+### Research ロールの設定
 
-ランタイムプラグインのツールは、ロールの `availablePlugins` でゲートされています。`~/mulmoclaude/config/roles/research.json` にロールを追加してください（既製のものが [`examples/research-role.json`](examples/research-role.json) にあります）。現れなければアプリ内 `/roles` UI から作り直し。その後 **Research** ロールを選択。
+プラグインのツールは、ロールの `availablePlugins` でゲートされています。[クイックスタート](#クイックスタート)を実施済みなら Research ロールは既に置かれています。そうでなければ [`examples/research-role.json`](examples/research-role.json) を `~/mulmoclaude/config/roles/research.json` にコピー（または `/roles` UI から作成）し、**Research** ロールを選択してください。
 
 ### デモデータの投入
 

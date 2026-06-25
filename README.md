@@ -10,22 +10,23 @@ It doesn't just save summaries. For each paper it records *why the paper matters
 
 For *using* the plugin. Assumes [MulmoClaude](https://github.com/receptron/mulmoclaude) is already cloned and runnable (Node 20+, yarn).
 
-```bash
-git clone https://github.com/tb-yasu/research-memory-plugin.git
-cd research-memory-plugin
-yarn install && yarn build
-```
+1. **Clone & build the plugin:**
 
-Then boot MulmoClaude with the plugin loaded. The bundled `./dev.sh` is the recommended path — point `MULMO_DIR` at your MulmoClaude checkout:
+   ```bash
+   git clone https://github.com/tb-yasu/research-memory-plugin.git
+   cd research-memory-plugin
+   yarn install && yarn build
+   ```
 
-```bash
-MULMO_DIR=/abs/path/to/mulmoclaude ./dev.sh
-```
+2. **Add the Research role** (before booting, so MulmoClaude picks it up): copy [`examples/research-role.json`](examples/research-role.json) to `~/mulmoclaude/config/roles/research.json`. This role grants the tool and teaches the LLM to extract Paper Cards.
 
-Finally:
+3. **Boot MulmoClaude with the plugin loaded.** The bundled `./dev.sh` is the recommended path — point `MULMO_DIR` at your MulmoClaude checkout:
 
-1. Copy [`examples/research-role.json`](examples/research-role.json) to `~/mulmoclaude/config/roles/research.json` (this role grants the tool and teaches the LLM to extract Paper Cards).
-2. Open <http://localhost:5173/> and pick the **Research** role.
+   ```bash
+   MULMO_DIR=/abs/path/to/mulmoclaude ./dev.sh
+   ```
+
+4. **Open <http://localhost:5173/>** and pick the **Research** role.
 
 Paste an abstract or say `Register arXiv:2504.19482` and your first card appears. (For the manual / contributor setup, see [Development](#development).)
 
@@ -44,8 +45,8 @@ Paste an abstract or say `Register arXiv:2504.19482` and your first card appears
 
 ## Core concepts
 
-- **Paper Card** — one JSON record per paper. The paper's own content (summary, claims, method, limitations) plus your notes, captured as structured reading notes (an Ochiai-style 6-question template).
-- **Relational spine** — Research Memory stores not just *what a paper says*, but *how it relates to your research*. That relation layer is the relational spine — relation to my work, citation purposes, reusable ideas, next actions, themes. It is the part Zotero / Notion don't have.
+- **Paper Card** — one JSON record per paper. The paper's own content (summary, claims, method, limitations) plus your notes, captured as structured reading notes (an Ochiai-style reading template).
+- **Relational spine** — Research Memory stores not just *what a paper says*, but *how it relates to your research*. That relation layer is the relational spine — relation to my work, citation purposes, reusable ideas, next actions, themes. It's what general-purpose reference managers don't make easy to keep structured.
 - **Research profile** — your current focus, themes, and open questions. The LLM uses it to ground each card's *relation to my work* and *citation purposes*.
 
 ## Usage example
@@ -61,7 +62,7 @@ In the **Research** role:
 
 To seed sample data so these work immediately, see [Seed demo data](#seed-demo-data).
 
-## Advanced
+## Advanced usage
 
 ### Full-text reading on registration
 
@@ -80,7 +81,7 @@ Without them everything still works — the plugin falls back to inline full-tex
 
 The canvas panel has an *Idea engine* switch. With **Claude** (default) the host synthesizes ideas in chat. With **Codex** the plugin shells out to the `codex` CLI (`codex exec`, prompt on stdin, sandboxed read-only) and returns ready-made ideas; you also pick the model and the reasoning effort (思考力: low / medium / high). The choice persists in `engine-config.json`.
 
-Codex requires the `codex` CLI installed and a completed `codex login`. Valid models depend on the auth: a **ChatGPT-account** login accepts only the codex default (`gpt-5.5` as of codex 0.139); an **OpenAI API key** unlocks `gpt-5-codex` / `gpt-5` / `o3` / `o4-mini`. The Codex path uses the gathered card material only (it does not run the `idea-miner` subagents).
+Codex requires the `codex` CLI installed and a completed `codex login`. Valid models depend on your auth method (and Codex CLI version): a **ChatGPT-account** login accepts only the codex default model, while an **OpenAI API key** unlocks the full list (`gpt-5-codex`, `gpt-5`, the `o`-series, …). The Codex path uses the gathered card material only (it does not run the `idea-miner` subagents).
 
 ## Configuration
 
@@ -123,9 +124,9 @@ Running MulmoClaude from a source checkout instead of the published launcher? Th
 MULMOCLAUDE_DEV_PLUGINS=/ABS/PATH/TO/research-memory-plugin yarn dev   # in the mulmoclaude repo
 ```
 
-### Make the tool callable
+### Role setup
 
-Runtime-plugin tools are gated by a role's `availablePlugins`. Add the role at `~/mulmoclaude/config/roles/research.json` (ready-made in [`examples/research-role.json`](examples/research-role.json)); if it doesn't appear, recreate it from the in-app `/roles` UI. Then pick the **Research** role.
+The plugin's tool is gated by a role's `availablePlugins`. If you followed [Quick start](#quick-start) the Research role is already in place; otherwise copy [`examples/research-role.json`](examples/research-role.json) to `~/mulmoclaude/config/roles/research.json` (or recreate it from the in-app `/roles` UI), then pick the **Research** role.
 
 ### Seed demo data
 
