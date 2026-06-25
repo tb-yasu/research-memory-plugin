@@ -49,6 +49,15 @@
     "zod": "^4.4.3"
   },
   "license": "MIT",
+  "author": "Yasuo Tabei",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tb-yasu/research-memory-plugin.git"
+  },
+  "homepage": "https://github.com/tb-yasu/research-memory-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/tb-yasu/research-memory-plugin/issues"
+  },
   "dependencies": {
     "xlsx": "^0.18.5"
   }

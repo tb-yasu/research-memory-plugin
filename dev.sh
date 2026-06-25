@@ -16,6 +16,12 @@ set -euo pipefail
 MULMO_DIR="${MULMO_DIR:-$HOME/Prog/110_agents/mulmoclaude}"
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+if [ ! -d "$MULMO_DIR" ]; then
+  echo "✗ MULMO_DIR not found: $MULMO_DIR" >&2
+  echo "  set it:  MULMO_DIR=/path/to/mulmoclaude ./dev.sh" >&2
+  exit 1
+fi
+
 echo "→ killing any existing mulmoclaude dev stack…"
 pkill -9 -f "concurrently -n server,client" 2>/dev/null || true
 pkill -9 -f "tsx server/index.ts" 2>/dev/null || true
@@ -30,4 +36,5 @@ sleep 1
 echo "→ starting ONE stack (sandbox off, dev plugin = $PLUGIN_DIR)…"
 echo "  open http://localhost:5173/  and pick the Research role."
 cd "$MULMO_DIR"
-exec env DISABLE_SANDBOX=1 MULMOCLAUDE_DEV_PLUGINS="$PLUGIN_DIR" yarn dev
+exec env DISABLE_SANDBOX=1 MULMOCLAUDE_DEV_PLUGINS="$PLUGIN_DIR" \
+  RESEARCH_MEMORY_MAILTO="${RESEARCH_MEMORY_MAILTO:-}" yarn dev
